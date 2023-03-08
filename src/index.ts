@@ -87,9 +87,9 @@ const isArray = (arg: any): arg is any[] | readonly any[] => Array.isArray(arg);
 
 const createKeyDef = <T extends object>(t: T): KeyDef<T, KeyMeta<any>> =>
   Object.assign(t, {
-    // [KeyMetadataSymbol]: {
-    //   returnType: true,
-    // },
+    [KeyMetadataSymbol]: {
+      returnType: true,
+    },
   }) as KeyDef<T, KeyMeta<any>>;
 
 const createKey = <T extends ValidKeyValue[]>(queryKey: T): Key<T, KeyMeta<any>> =>
@@ -195,25 +195,21 @@ if (import.meta.vitest) {
   });
 
   test('Correct runtime value', () => {
-    expect(testKeys._def).toStrictEqual(['test']);
-    expect(testKeys.all).toStrictEqual({ queryKey: ['test', 'all'] });
-    expect(testKeys.all2).toStrictEqual({ queryKey: ['test', 'all2', ''] });
+    const key = (x: unknown[]) => createKey(x);
+    const def = (x: object) => createKeyDef(x);
 
-    expect(testKeys.detail._def).toStrictEqual(['test', 'detail']);
-    expect(testKeys.detail('string')).toStrictEqual({ queryKey: ['test', 'detail', 'string'] });
-
-    expect(testKeys.list).toMatchObject({
-      queryKey: ['test', 'list'],
-    });
-    expect(testKeys.list.search._def).toStrictEqual(['test', 'list', 'search']);
-    expect(testKeys.list.search({ lol: 'string' })).toStrictEqual({
-      queryKey: ['test', 'list', 'search', { lol: 'string' }],
-    });
-
-    expect(testKeys.byId._def).toStrictEqual(['test', 'byId']);
-    expect(testKeys.byId('string')).toMatchObject({ queryKey: ['test', 'byId', 'string'] });
-    expect(testKeys.byId('string').likes).toStrictEqual({
-      queryKey: ['test', 'byId', 'string', 'likes'],
-    });
+    expect(testKeys._def).toStrictEqual(def(['test']));
+    expect(testKeys.all).toStrictEqual(key(['test', 'all']));
+    expect(testKeys.all2).toStrictEqual(key(['test', 'all2', '']));
+    expect(testKeys.detail._def).toStrictEqual(def(['test', 'detail']));
+    expect(testKeys.detail('string')).toStrictEqual(key(['test', 'detail', 'string']));
+    expect(testKeys.list).toMatchObject(key(['test', 'list']));
+    expect(testKeys.list.search._def).toStrictEqual(def(['test', 'list', 'search']));
+    expect(testKeys.list.search({ lol: 'string' })).toStrictEqual(
+      key(['test', 'list', 'search', { lol: 'string' }]),
+    );
+    expect(testKeys.byId._def).toStrictEqual(def(['test', 'byId']));
+    expect(testKeys.byId('string')).toMatchObject(key(['test', 'byId', 'string']));
+    expect(testKeys.byId('string').likes).toStrictEqual(key(['test', 'byId', 'string', 'likes']));
   });
 }
