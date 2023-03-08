@@ -1,0 +1,26 @@
+{
+  "name": "react-query-factory",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "author": "Ar4ys <ar4ys@proton.me> (https://github.com/Ar4ys)",
+  "license": "ISC",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "lint": "tsc"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^4.26.1",
+    "@types/react": "^18.0.28",
+    "react": "^18.2.0",
+    "tsup": "^6.6.3",
+    "typescript": "^4.9.5"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^4.26.1",
+    "@types/react": "^18.0.28",
+    "react": "^18.2.0"
+  }
+}
