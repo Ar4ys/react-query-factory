@@ -8,15 +8,22 @@
   "author": "Ar4ys <ar4ys@proton.me> (https://github.com/Ar4ys)",
   "license": "ISC",
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
-    "lint": "tsc"
+    "build": "tsup",
+    "lint": "tsc",
+    "test": "vitest run && vitest typecheck --run",
+    "test:watch": "vitest watch",
+    "test:types:watch": "vitest typecheck"
   },
   "devDependencies": {
+    "@ianvs/prettier-plugin-sort-imports": "^3.7.1",
     "@tanstack/react-query": "^4.26.1",
     "@types/react": "^18.0.28",
+    "prettier": "^2.8.4",
+    "prettier-plugin-jsdoc": "^0.4.2",
     "react": "^18.2.0",
     "tsup": "^6.6.3",
-    "typescript": "^4.9.5"
+    "typescript": "^4.9.5",
+    "vitest": "^0.29.2"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^4.26.1",

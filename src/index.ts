@@ -39,7 +39,7 @@ type FactorySchema = Record<string, FactoryProperty>;
 
 type MapFactoryPropertyToKey<
   TKey extends ValidKeyValue[],
-  TProp extends FactoryProperty
+  TProp extends FactoryProperty,
 > = TProp extends Tuple
   ? Key<[...TKey, ...TProp], KeyMeta<unknown>>
   : TProp extends FactoryPropertyObject
@@ -99,7 +99,7 @@ const createKey = <T extends ValidKeyValue[]>(queryKey: T): Key<T, KeyMeta<any>>
 
 function mapFactorySchema<TKey extends ValidKeyValue[], TSchema extends FactorySchema>(
   queryKey: TKey,
-  schema: TSchema
+  schema: TSchema,
 ): MapFactorySchema<TKey, TSchema> {
   const result: Record<string, MapFactoryPropertyToKey<ValidKeyValue[], FactoryProperty>> = {};
 
@@ -109,7 +109,7 @@ function mapFactorySchema<TKey extends ValidKeyValue[], TSchema extends FactoryS
     } else if (typeof value === 'object') {
       result[key] = Object.assign(
         createKey([...queryKey, key]),
-        mapFactorySchema([...queryKey, key], value)
+        mapFactorySchema([...queryKey, key], value),
       );
     } else if (KeyBuilderSymbol in value) {
       result[key] = createKey([...queryKey, key]);
@@ -122,7 +122,7 @@ function mapFactorySchema<TKey extends ValidKeyValue[], TSchema extends FactoryS
           const { queryKey: dynQueryKey, ...rest } = result;
           const a = Object.assign(
             createKey([...queryKey, key, ...dynQueryKey]),
-            mapFactorySchema([...queryKey, key, ...dynQueryKey], rest)
+            mapFactorySchema([...queryKey, key, ...dynQueryKey], rest),
           );
 
           return a;
@@ -141,7 +141,7 @@ function mapFactorySchema<TKey extends ValidKeyValue[], TSchema extends FactoryS
 
 export function createQueryKeys<TKey extends string, TSchema extends FactorySchema>(
   queryDef: TKey,
-  schemaFactory: SchemaBuilder<TSchema>
+  schemaFactory: SchemaBuilder<TSchema>,
 ): QueryKeyFactoryResult<TKey, TSchema> {
   const key: [TKey] = [queryDef];
   return {
@@ -152,72 +152,68 @@ export function createQueryKeys<TKey extends string, TSchema extends FactorySche
 
 // ---------------------------------------------------
 
-const testKeys = createQueryKeys('test', k => ({
-  all: k(),
-  all2: [''],
-  detail: k<string>()((userId: string) => [userId]),
-  list: k<string>()({
-    search: k<string>()((filters: { lol: string }) => [filters]),
-  }),
-  byId: k<boolean>()((id: string) => ({
-    queryKey: [id],
-    likes: k<number>(),
-  })),
-}));
+if (import.meta.vitest) {
+  const { test, expect, assertType } = import.meta.vitest;
 
-type TestKeys = {
-  _def: KeyDef<['test'], KeyMeta<unknown>>;
-  all: Key<['test', 'all'], KeyMeta<unknown>>;
-  all2: Key<['test', 'all2', string], KeyMeta<unknown>>;
-  detail: ((userId: string) => Key<['test', 'detail', string], KeyMeta<string>>) & {
-    _def: KeyDef<['test', 'detail'], KeyMeta<string>>;
-  };
-  list: Key<['test', 'list'], KeyMeta<string>> & {
-    search: ((filters: {
-      lol: string;
-    }) => Key<['test', 'list', 'search', { lol: string }], KeyMeta<string>>) & {
-      _def: KeyDef<['test', 'list', 'search'], KeyMeta<string>>;
+  const testKeys = createQueryKeys('test', (k) => ({
+    all: k(),
+    all2: [''],
+    detail: k<string>()((userId: string) => [userId]),
+    list: k<string>()({
+      search: k<string>()((filters: { lol: string }) => [filters]),
+    }),
+    byId: k<boolean>()((id: string) => ({
+      queryKey: [id],
+      likes: k<number>(),
+    })),
+  }));
+
+  test('Correct type', () => {
+    type ExpectedTestKeys = {
+      _def: KeyDef<['test'], KeyMeta<unknown>>;
+      all: Key<['test', 'all'], KeyMeta<unknown>>;
+      all2: Key<['test', 'all2', string], KeyMeta<unknown>>;
+      detail: ((userId: string) => Key<['test', 'detail', string], KeyMeta<string>>) & {
+        _def: KeyDef<['test', 'detail'], KeyMeta<string>>;
+      };
+      list: Key<['test', 'list'], KeyMeta<string>> & {
+        search: ((filters: {
+          lol: string;
+        }) => Key<['test', 'list', 'search', { lol: string }], KeyMeta<string>>) & {
+          _def: KeyDef<['test', 'list', 'search'], KeyMeta<string>>;
+        };
+      };
+      byId: ((id: string) => {
+        queryKey: ['test', 'byId', string];
+        likes: Key<['test', 'byId', string, 'likes'], KeyMeta<number>>;
+      }) & {
+        _def: ['test', 'byId'];
+      };
     };
-  };
-  byId: ((id: string) => {
-    queryKey: ['test', 'byId', string];
-    likes: Key<['test', 'byId', string, 'likes'], KeyMeta<number>>;
-  }) & {
-    _def: ['test', 'byId'];
-  };
-};
 
-const a: TestKeys = testKeys;
+    assertType<ExpectedTestKeys>(testKeys);
+  });
 
-console.group('testKeys._def', testKeys._def);
-{
-  console.log('testKeys.all.queryKey', testKeys.all.queryKey);
-  console.log('testKeys.all2.queryKey', testKeys.all2.queryKey);
+  test('Correct runtime value', () => {
+    expect(testKeys._def).toStrictEqual(['test']);
+    expect(testKeys.all).toStrictEqual({ queryKey: ['test', 'all'] });
+    expect(testKeys.all2).toStrictEqual({ queryKey: ['test', 'all2', ''] });
 
-  console.group('testKeys.detail._def', testKeys.detail._def);
-  {
-    console.log("testKeys.detail('string').queryKey", testKeys.detail('string').queryKey);
-  }
-  console.groupEnd();
+    expect(testKeys.detail._def).toStrictEqual(['test', 'detail']);
+    expect(testKeys.detail('string')).toStrictEqual({ queryKey: ['test', 'detail', 'string'] });
 
-  console.group('testKeys.list.queryKey', testKeys.list.queryKey);
-  {
-    console.group('testKeys.list.search._def', testKeys.list.search._def);
-    {
-      console.log(
-        "testKeys.list.search({ lol: 'string' }).queryKey",
-        testKeys.list.search({ lol: 'string' }).queryKey
-      );
-    }
-    console.groupEnd();
-  }
-  console.groupEnd();
+    expect(testKeys.list).toMatchObject({
+      queryKey: ['test', 'list'],
+    });
+    expect(testKeys.list.search._def).toStrictEqual(['test', 'list', 'search']);
+    expect(testKeys.list.search({ lol: 'string' })).toStrictEqual({
+      queryKey: ['test', 'list', 'search', { lol: 'string' }],
+    });
 
-  console.group('testKeys.byId._def', testKeys.byId._def);
-  {
-    console.log("testKeys.byId('string').queryKey", testKeys.byId('string').queryKey);
-    console.log("testKeys.byId('string').likes.queryKey", testKeys.byId('string').likes.queryKey);
-  }
-  console.groupEnd();
+    expect(testKeys.byId._def).toStrictEqual(['test', 'byId']);
+    expect(testKeys.byId('string')).toMatchObject({ queryKey: ['test', 'byId', 'string'] });
+    expect(testKeys.byId('string').likes).toStrictEqual({
+      queryKey: ['test', 'byId', 'string', 'likes'],
+    });
+  });
 }
-console.groupEnd();
