@@ -8,6 +8,8 @@ import {
 import { DynamicKey, Key, KeyMeta } from './createQueryKeys';
 import { UseInfiniteQueryResult } from './infiniteQueryObserverResult';
 
+type GetInfiniteDataType<T extends InfiniteData<any>> = T['pages'][number];
+
 type GetPreviousPageParamFunction<TQueryFnData = unknown, TPageParam = unknown> = (
   firstPage: TQueryFnData,
   allPages: TQueryFnData[],
@@ -86,14 +88,14 @@ export type CreateInfiniteQuery<TConfig> = {
     TKey extends QueryKey,
     TMeta extends KeyMeta<InfiniteData<any>>,
     TError = unknown,
-    TData = TMeta['returnType']['pages'][number],
+    TData = GetInfiniteDataType<TMeta['returnType']>,
     TPageParam = unknown,
   >(
     queryKey: Key<any, TMeta>,
     requestConfig:
       | InfiniteQueryRequestConfig<
           TConfig,
-          TMeta['returnType']['pages'][number],
+          GetInfiniteDataType<TMeta['returnType']>,
           TError,
           TData,
           TKey,
@@ -101,13 +103,19 @@ export type CreateInfiniteQuery<TConfig> = {
         >
       | (() => InfiniteQueryRequestConfig<
           TConfig,
-          TMeta['returnType']['pages'][number],
+          GetInfiniteDataType<TMeta['returnType']>,
           TError,
           TData,
           TKey,
           TPageParam
         >),
-  ): UseInfiniteQueryHook<TMeta['returnType']['pages'][number], TError, TData, TKey, TPageParam>;
+  ): UseInfiniteQueryHook<
+    GetInfiniteDataType<TMeta['returnType']>,
+    TError,
+    TData,
+    TKey,
+    TPageParam
+  >;
 
   <
     TBaseKey extends QueryKey,
@@ -115,14 +123,14 @@ export type CreateInfiniteQuery<TConfig> = {
     TArgs extends any[],
     TMeta extends KeyMeta<InfiniteData<any>>,
     TError = unknown,
-    TData = TMeta['returnType']['pages'][number],
+    TData = GetInfiniteDataType<TMeta['returnType']>,
     TPageParam = unknown,
   >(
     queryKey: DynamicKey<TBaseKey, TKey, TMeta, TArgs>,
     requestConfig:
       | InfiniteQueryRequestConfig<
           TConfig,
-          TMeta['returnType']['pages'][number],
+          GetInfiniteDataType<TMeta['returnType']>,
           TError,
           TData,
           [...TBaseKey, ...TKey],
@@ -132,7 +140,7 @@ export type CreateInfiniteQuery<TConfig> = {
           ...args: TArgs
         ) => InfiniteQueryRequestConfig<
           TConfig,
-          TMeta['returnType']['pages'][number],
+          GetInfiniteDataType<TMeta['returnType']>,
           TError,
           TData,
           [...TBaseKey, ...TKey],
