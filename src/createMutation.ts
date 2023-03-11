@@ -1,22 +1,28 @@
-import { UseMutationOptions, UseMutationResult } from '@tanstack/react-query';
+import {
+  UseMutationOptions as TanstackUseMutationOptions,
+  UseMutationResult,
+} from '@tanstack/react-query';
 
-// TODO: Replace with `MutationRequestConfig` (similarly to `QueryRequestConfig` and `InfiniteQueryRequestConfig`)
-type WithMutationRequestConfig<T, TConfig> = T & { request: TConfig };
+type UseMutationOptions<TData = unknown, TError = unknown, TVariables = void> = Omit<
+  TanstackUseMutationOptions<TData, TError, TVariables>,
+  'mutationFn' | 'mutationKey'
+>;
 
-type UseMutationHook<TResponse, TRequest> = (
-  queryOpts?: UseMutationOptions<TResponse, /* Error */ unknown, TRequest>,
-) => UseMutationResult<TResponse, /* Error */ unknown, TRequest>;
+type MutationRequestConfig<
+  TConfig,
+  TData = unknown,
+  TError = unknown,
+  TVariables = void,
+> = UseMutationOptions<TData, TError, TVariables> & {
+  request: TConfig | ((data: TVariables) => TConfig);
+};
 
-export type CreateMutation<TConfig> = <TResponse, TRequest, TRequestModified = TRequest>(
+type UseMutationHook<TResponse, TError, TInput> = (
+  queryOpts?: UseMutationOptions<TResponse, TError, TInput>,
+) => UseMutationResult<TResponse, TError, TInput>;
+
+export type CreateMutation<TConfig> = <TResponse, TInput, TError = unknown>(
   requestConfig:
-    | WithMutationRequestConfig<
-        UseMutationOptions<TResponse, /* Error */ unknown, TRequestModified>,
-        TConfig
-      >
-    | ((
-        data: TRequest,
-      ) => WithMutationRequestConfig<
-        UseMutationOptions<TResponse, /* Error */ unknown, TRequestModified>,
-        TConfig
-      >),
-) => UseMutationHook<TResponse, TRequestModified>;
+    | MutationRequestConfig<TConfig, TResponse, TError, TInput>
+    | (() => MutationRequestConfig<TConfig, TResponse, TError, TInput>),
+) => UseMutationHook<TResponse, TError, TInput>;

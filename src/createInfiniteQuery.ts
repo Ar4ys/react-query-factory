@@ -36,7 +36,7 @@ type UseInfiniteQueryOptions<
 > = ContextOptions &
   Omit<
     QueryObserverOptions<TQueryFnData, TError, TData, InfiniteData<TQueryFnData>, TQueryKey>,
-    'getNextPageParam' | 'getPreviousPageParam'
+    'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey'
   > & {
     /**
      * This function can be set to automatically get the previous cursor for infinite queries. The

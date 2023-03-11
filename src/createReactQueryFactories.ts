@@ -97,11 +97,12 @@ export function createReactQueryFactories<
   type TestMutationInput = { lol: string };
   type TestMutationResponse = { olo: number };
 
-  const useTestMutation = createMutation<TestMutationResponse, TestMutationInput>((data) => {
+  const useTestMutation = createMutation<TestMutationResponse, TestMutationInput>(() => {
     return {
-      request: {
+      request: (data) => ({
+        //      ^?
         fancy: data.lol,
-      },
+      }),
     };
   });
 

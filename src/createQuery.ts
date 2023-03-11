@@ -13,7 +13,7 @@ type UseQueryOptions<
   TQueryKey extends QueryKey = QueryKey,
 > = Omit<
   TanstackUseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-  'getNextPageParam' | 'getPreviousPageParam'
+  'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey'
 >;
 
 type QueryRequestConfig<
