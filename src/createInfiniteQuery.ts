@@ -32,33 +32,47 @@ type UseInfiniteQueryOptions<
   TError = unknown,
   TData = InfiniteData<TQueryFnData>,
   TQueryKey extends QueryKey = QueryKey,
-  TPageParam = unknown,
 > = ContextOptions &
   Omit<
     QueryObserverOptions<TQueryFnData, TError, TData, InfiniteData<TQueryFnData>, TQueryKey>,
     'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey'
-  > & {
-    /**
-     * This function can be set to automatically get the previous cursor for infinite queries. The
-     * result will also be used to determine the value of `hasPreviousPage`.
-     */
-    getPreviousPageParam?: GetPreviousPageParamFunction<TQueryFnData, TPageParam>;
-    /**
-     * This function can be set to automatically get the next cursor for infinite queries. The
-     * result will also be used to determine the value of `hasNextPage`.
-     */
-    getNextPageParam?: GetNextPageParamFunction<TQueryFnData, TPageParam>;
-  };
+  >;
 
-type InfiniteQueryRequestConfig<
+type InfiniteQueryConfig<
   TConfig,
+  TArgs extends any[],
   TQueryFnData = unknown,
   TError = unknown,
   TData = InfiniteData<TQueryFnData>,
   TQueryKey extends QueryKey = QueryKey,
   TPageParam = unknown,
-> = UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey, TPageParam> & {
-  request: ((pageParam: TPageParam) => TConfig) | undefined | null | false;
+> = {
+  /**
+   * TODO: Should we give user ability to pass `TConfig` object directly?
+   *
+   * If user's API has standardized parameter, that is used for pagination (like in trpc), he should
+   * be able to use it in `queryFn` (maybe we should create `infiniteQueryFn`?) in
+   * `createReactQueryFactories`. In that case there is no need to force `request` to be function
+   * here.
+   */
+  // For some reason TS thinks that `pageParam` is unknown if I specify params like this:
+  // `(pageParam: TPageParam, ...args: TArgs) => ...`
+  request: (...args: [pageParam: TPageParam, ...args: TArgs]) => TConfig | undefined | null | false;
+  useOptions?:
+    | UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey>
+    | ((...args: TArgs) => UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey>);
+
+  /**
+   * This function can be set to automatically get the previous cursor for infinite queries. The
+   * result will also be used to determine the value of `hasPreviousPage`.
+   */
+  getPreviousPageParam?: GetPreviousPageParamFunction<TQueryFnData, TPageParam>;
+
+  /**
+   * This function can be set to automatically get the next cursor for infinite queries. The result
+   * will also be used to determine the value of `hasNextPage`.
+   */
+  getNextPageParam?: GetNextPageParamFunction<TQueryFnData, TPageParam>;
 };
 
 type UseInfiniteQueryHook<
@@ -66,9 +80,8 @@ type UseInfiniteQueryHook<
   TError = unknown,
   TData = InfiniteData<TResponse>,
   TQueryKey extends QueryKey = QueryKey,
-  TPageParam = unknown,
 > = <TTData = TData>(
-  queryOpts?: UseInfiniteQueryOptions<TResponse, TError, TTData, TQueryKey, TPageParam>,
+  queryOpts?: UseInfiniteQueryOptions<TResponse, TError, TTData, TQueryKey>,
 ) => UseInfiniteQueryResult<TTData, TError>;
 
 type UseInfiniteQueryHookWithArgs<
@@ -77,10 +90,9 @@ type UseInfiniteQueryHookWithArgs<
   TError = unknown,
   TData = InfiniteData<TResponse>,
   TQueryKey extends QueryKey = QueryKey,
-  TPageParam = unknown,
 > = <TTData = TData>(
   args: TArgs,
-  queryOpts?: UseInfiniteQueryOptions<TResponse, TError, TTData, TQueryKey, TPageParam>,
+  queryOpts?: UseInfiniteQueryOptions<TResponse, TError, TTData, TQueryKey>,
 ) => UseInfiniteQueryResult<TTData, TError>;
 
 export type CreateInfiniteQuery<TConfig> = {
@@ -92,30 +104,16 @@ export type CreateInfiniteQuery<TConfig> = {
     TPageParam = unknown,
   >(
     queryKey: Key<any, TMeta>,
-    requestConfig:
-      | InfiniteQueryRequestConfig<
-          TConfig,
-          GetInfiniteDataType<TMeta['returnType']>,
-          TError,
-          TData,
-          TKey,
-          TPageParam
-        >
-      | (() => InfiniteQueryRequestConfig<
-          TConfig,
-          GetInfiniteDataType<TMeta['returnType']>,
-          TError,
-          TData,
-          TKey,
-          TPageParam
-        >),
-  ): UseInfiniteQueryHook<
-    GetInfiniteDataType<TMeta['returnType']>,
-    TError,
-    TData,
-    TKey,
-    TPageParam
-  >;
+    config: InfiniteQueryConfig<
+      TConfig,
+      [],
+      GetInfiniteDataType<TMeta['returnType']>,
+      TError,
+      TData,
+      TKey,
+      TPageParam
+    >,
+  ): UseInfiniteQueryHook<GetInfiniteDataType<TMeta['returnType']>, TError, TData, TKey>;
 
   <
     TBaseKey extends QueryKey,
@@ -127,24 +125,14 @@ export type CreateInfiniteQuery<TConfig> = {
     TPageParam = unknown,
   >(
     queryKey: DynamicKey<TBaseKey, TKey, TMeta, TArgs>,
-    requestConfig:
-      | InfiniteQueryRequestConfig<
-          TConfig,
-          GetInfiniteDataType<TMeta['returnType']>,
-          TError,
-          TData,
-          [...TBaseKey, ...TKey],
-          TPageParam
-        >
-      | ((
-          ...args: TArgs
-        ) => InfiniteQueryRequestConfig<
-          TConfig,
-          GetInfiniteDataType<TMeta['returnType']>,
-          TError,
-          TData,
-          [...TBaseKey, ...TKey],
-          TPageParam
-        >),
-  ): UseInfiniteQueryHookWithArgs<TMeta['returnType'], TArgs, TError, TData, TKey, TPageParam>;
+    config: InfiniteQueryConfig<
+      TConfig,
+      TArgs,
+      GetInfiniteDataType<TMeta['returnType']>,
+      TError,
+      TData,
+      [...TBaseKey, ...TKey],
+      TPageParam
+    >,
+  ): UseInfiniteQueryHookWithArgs<TMeta['returnType'], TArgs, TError, TData, TKey>;
 };

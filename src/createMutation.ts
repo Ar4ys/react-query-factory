@@ -8,13 +8,11 @@ type UseMutationOptions<TData = unknown, TError = unknown, TVariables = void> = 
   'mutationFn' | 'mutationKey'
 >;
 
-type MutationRequestConfig<
-  TConfig,
-  TData = unknown,
-  TError = unknown,
-  TVariables = void,
-> = UseMutationOptions<TData, TError, TVariables> & {
+type MutationConfig<TConfig, TData = unknown, TError = unknown, TVariables = void> = {
   request: TConfig | ((data: TVariables) => TConfig);
+  useOptions?:
+    | UseMutationOptions<TData, TError, TVariables>
+    | ((data: TVariables) => UseMutationOptions<TData, TError, TVariables>);
 };
 
 type UseMutationHook<TResponse, TError, TInput> = (
@@ -22,7 +20,5 @@ type UseMutationHook<TResponse, TError, TInput> = (
 ) => UseMutationResult<TResponse, TError, TInput>;
 
 export type CreateMutation<TConfig> = <TResponse, TInput, TError = unknown>(
-  requestConfig:
-    | MutationRequestConfig<TConfig, TResponse, TError, TInput>
-    | (() => MutationRequestConfig<TConfig, TResponse, TError, TInput>),
+  config: MutationConfig<TConfig, TResponse, TError, TInput>,
 ) => UseMutationHook<TResponse, TError, TInput>;

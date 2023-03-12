@@ -16,14 +16,23 @@ type UseQueryOptions<
   'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey'
 >;
 
-type QueryRequestConfig<
+type QueryConfig<
   TConfig,
+  TArgs extends any[],
   TQueryFnData = unknown,
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
-> = UseQueryOptions<TQueryFnData, TError, TData, TQueryKey> & {
-  request: TConfig | undefined | null | false;
+> = {
+  /**
+   * TODO: Should we give user ability to return falsy value in order to disable query (set `enable:
+   * false` under the hood)? This will complicate hook "helpers" (e.g what should
+   * fetch/prefetch/ensureData do, if `request` returns falsy value?)
+   */
+  request: ((...args: TArgs) => TConfig | undefined | null | false) | TConfig;
+  useOptions?:
+    | UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>
+    | ((...args: TArgs) => UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>);
 };
 
 type UseQueryHook<
@@ -49,9 +58,7 @@ type UseQueryHookWithArgs<
 export type CreateQuery<TConfig> = {
   <TKey extends QueryKey, TMeta extends KeyMeta<any>, TError, TData = TMeta['returnType']>(
     queryKey: Key<TKey, TMeta>,
-    requestConfig:
-      | QueryRequestConfig<TConfig, TMeta['returnType'], TError, TData, TKey>
-      | (() => QueryRequestConfig<TConfig, TMeta['returnType'], TError, TData, TKey>),
+    config: QueryConfig<TConfig, [], TMeta['returnType'], TError, TData, TKey>,
   ): UseQueryHook<TMeta['returnType'], TError, TData, TKey>;
 
   <
@@ -63,16 +70,6 @@ export type CreateQuery<TConfig> = {
     TData = TMeta['returnType'],
   >(
     queryKey: DynamicKey<TBaseKey, TKey, TMeta, TArgs>,
-    requestConfig:
-      | QueryRequestConfig<TConfig, TMeta['returnType'], TError, TData, [...TBaseKey, ...TKey]>
-      | ((
-          ...args: TArgs
-        ) => QueryRequestConfig<
-          TConfig,
-          TMeta['returnType'],
-          TError,
-          TData,
-          [...TBaseKey, ...TKey]
-        >),
+    config: QueryConfig<TConfig, TArgs, TMeta['returnType'], TError, TData, [...TBaseKey, ...TKey]>,
   ): UseQueryHookWithArgs<TMeta['returnType'], TArgs, TError, TData, [...TBaseKey, ...TKey]>;
 };

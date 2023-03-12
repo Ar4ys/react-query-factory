@@ -147,6 +147,34 @@ function mapFactorySchema<TKey extends ValidKeyValue[], TSchema extends FactoryS
   return result as MapFactorySchema<TKey, TSchema>;
 }
 
+/**
+ * It seems like there is no reason to leave Response types in `createQueryKeys`, because the way I
+ * intended API of my library to work is by using "helper" methods on hooks, like this:
+ *
+ * ```ts
+ * const useTest = createQuery(...)
+ *
+ * const queryClient = new QueryClient()
+ * // or
+ * const queryClient = useQueryClient()
+ *
+ * useTest.helpers(queryClient).invalidate()
+ * useTest.helpers(queryClient).setQueryData()
+ * ```
+ *
+ * This simplifies library a lot, because I don't need to write `QueryClientWrapper` anymore, which
+ * could leverage all cool features of my library (`queryKey` typing, `immer`, etc). Instead all
+ * features will be inside hook "helpers".
+ *
+ * Reasons to leave `createQueryKeys` as is:
+ *
+ * - QueryClient#getQueriesData
+ * - QueryClient#setQueriesData (but we can still provide `setQueriesData` for queries with dynamic
+ *   keys)
+ * - QueryClient#resetQueries (? maybe)
+ * - QueryClient#invalidateQueries (? maybe)
+ * - QueryClient#refetchQueries (? maybe)
+ */
 export function createQueryKeys<TKey extends string, TSchema extends FactorySchema>(
   queryDef: TKey,
   schemaFactory: SchemaBuilder<TSchema>,

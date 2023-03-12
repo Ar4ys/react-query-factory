@@ -66,14 +66,18 @@ export function createReactQueryFactories<
 
   const test = createQueryKeys('test', (k) => ({
     lol: k<{ test: string; test2: number }>(),
-    all: k.infinite<{ items: number[]; a: number }>()((test: boolean) => [test]),
+    lol1: k<{ test: string; test2: number }>()((test: number) => [test]),
+    all: k.infinite<{ items: number[]; a: number }>(),
+    all1: k.infinite<{ items: number[]; a: number }>()((test: boolean) => [test]),
   }));
 
   const useTestQuery = createQuery(test.lol, {
     request: {
       fancy: 'lol',
     },
-    select: (data) => data.test,
+    useOptions: {
+      select: (data) => data.test,
+    },
   });
 
   const { data } = useTestQuery({
@@ -81,15 +85,19 @@ export function createReactQueryFactories<
     select: (data) => data.test2,
   });
 
-  const useInfiniteQuery = createInfiniteQuery(test.all, (test) => ({
+  const useInfiniteQuery = createInfiniteQuery(test.all1, {
     getNextPageParam: (data) => data.a,
     //                 ^?
     request: (pageParam) => ({
       //      ^?
       fancy: pageParam.toString(),
     }),
-    select: (data) => data.pages.flatMap((x) => x.items),
-  }));
+
+    useOptions: () => ({
+      select: (data) => data.pages.flatMap((x) => x.items),
+      //       ^?
+    }),
+  });
 
   const { data: infiniteData } = useInfiniteQuery([true]);
   //            ^?
@@ -97,13 +105,11 @@ export function createReactQueryFactories<
   type TestMutationInput = { lol: string };
   type TestMutationResponse = { olo: number };
 
-  const useTestMutation = createMutation<TestMutationResponse, TestMutationInput>(() => {
-    return {
-      request: (data) => ({
-        //      ^?
-        fancy: data.lol,
-      }),
-    };
+  const useTestMutation = createMutation<TestMutationResponse, TestMutationInput>({
+    request: (data) => ({
+      //      ^?
+      fancy: data.lol,
+    }),
   });
 
   const { data: mutationData } = useTestMutation();
