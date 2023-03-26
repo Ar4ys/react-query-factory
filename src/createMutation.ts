@@ -30,6 +30,9 @@ type CreateMutationFactoryOptions<TConfig> = {
   mutationFn: MutationFunction<TConfig>;
 };
 
+// TODO: Unit tests
+// TODO: Mutation helpers (what "mutation helpers" can be?)
+// TODO: Documentation
 export const createMutationFactory = <TConfig>(
   options: CreateMutationFactoryOptions<TConfig>,
 ): CreateMutation<TConfig> => {

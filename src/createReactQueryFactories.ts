@@ -31,12 +31,12 @@ type CreateReactQueryFactoriesOptions<
   TQueryConfig = BaseRequestConfig,
   TMutationConfig = BaseRequestConfig,
 > = {
-  /** Default implementation is `fetch` */
   queryFn: QueryFunction<TQueryConfig>;
-  /** Default implementation is `fetch` with `POST` method */
   mutationFn: MutationFunction<TMutationConfig>;
 };
 
+// TODO: Unit tests
+// TODO: Documentation
 export function createReactQueryFactories<
   TQueryConfig = BaseRequestConfig,
   TMutationConfig = BaseRequestConfig,

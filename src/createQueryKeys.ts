@@ -243,6 +243,7 @@ function mapFactorySchema<TKey extends ValidKeyValue[], TSchema extends FactoryS
  *   testKeys.events(1).filter('asd');
  *   // => ["test", "events", [1], "filter", ['asd']]
  */
+// TODO: Documentation
 export function createQueryKeys<TKey extends string, TSchema extends FactorySchema>(
   queryDef: TKey,
   schemaFactory: SchemaBuilder<TSchema>,

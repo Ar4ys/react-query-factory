@@ -141,6 +141,9 @@ type CreateInfiniteQueryFactoryOptions<TConfig> = {
   queryFn: QueryFunction<TConfig>;
 };
 
+// TODO: Unit tests
+// TODO: Query helpers
+// TODO: Documentation
 export const createInfiniteQueryFactory = <TConfig>(
   options: CreateInfiniteQueryFactoryOptions<TConfig>,
 ): CreateInfiniteQuery<TConfig> => {

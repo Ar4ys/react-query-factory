@@ -91,6 +91,9 @@ type CreateQueryFactoryOptions<TConfig> = {
   queryFn: QueryFunction<TConfig>;
 };
 
+// TODO: Unit tests
+// TODO: Query helpers
+// TODO: Documentation
 export const createQueryFactory = <TConfig>(
   options: CreateQueryFactoryOptions<TConfig>,
 ): CreateQuery<TConfig> => {
