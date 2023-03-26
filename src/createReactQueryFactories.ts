@@ -1,4 +1,5 @@
 import { QueryFunctionContext } from '@tanstack/react-query';
+import { useState } from 'react';
 
 import { CreateInfiniteQuery } from './createInfiniteQuery';
 import { CreateMutation } from './createMutation';
@@ -68,10 +69,10 @@ export function createReactQueryFactories<
     lol: k<{ test: string; test2: number }>(),
     lol1: k<{ test: string; test2: number }>()((test: number) => [test]),
     all: k.infinite<{ items: number[]; a: number }>(),
-    all1: k.infinite<{ items: number[]; a: number }>()((test: boolean) => [test]),
+    all1: k.infinite<{ items: number[]; a: number }>()((test?: boolean) => [test]),
   }));
 
-  const useTestQuery = createQuery(test.lol, {
+  const useTestQuery = createQuery(test.lol1, {
     request: {
       fancy: 'lol',
     },
@@ -80,7 +81,7 @@ export function createReactQueryFactories<
     },
   });
 
-  const { data } = useTestQuery({
+  const { data } = useTestQuery([1], {
     //    ^?
     select: (data) => data.test2,
   });
@@ -88,12 +89,12 @@ export function createReactQueryFactories<
   const useInfiniteQuery = createInfiniteQuery(test.all1, {
     getNextPageParam: (data) => data.a,
     //                 ^?
-    request: (pageParam) => ({
+    request: (pageParam, test) => ({
       //      ^?
       fancy: pageParam.toString(),
     }),
 
-    useOptions: () => ({
+    useOptions: (test = true) => ({
       select: (data) => data.pages.flatMap((x) => x.items),
       //       ^?
     }),
