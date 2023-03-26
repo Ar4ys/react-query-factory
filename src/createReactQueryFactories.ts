@@ -1,5 +1,4 @@
 import { QueryFunctionContext } from '@tanstack/react-query';
-import { useState } from 'react';
 
 import { CreateInfiniteQuery } from './createInfiniteQuery';
 import { CreateMutation } from './createMutation';
@@ -65,11 +64,11 @@ export function createReactQueryFactories<
     },
   });
 
-  const test = createQueryKeys('test', (k) => ({
-    lol: k<{ test: string; test2: number }>(),
-    lol1: k<{ test: string; test2: number }>()((test: number) => [test]),
-    all: k.infinite<{ items: number[]; a: number }>(),
-    all1: k.infinite<{ items: number[]; a: number }>()((test?: boolean) => [test]),
+  const test = createQueryKeys('test', (key) => ({
+    lol: key<{ test: string; test2: number }>(),
+    lol1: key.dynamic<{ test: string; test2: number }, [test: number]>(),
+    all: key.infinite<{ items: number[]; a: number }>(),
+    all1: key.infinite.dynamic<{ items: number[]; a: number }, [test?: boolean]>(),
   }));
 
   const useTestQuery = createQuery(test.lol1, {

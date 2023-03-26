@@ -4,7 +4,7 @@ import {
   UseQueryResult,
 } from '@tanstack/react-query';
 
-import { DynamicKey, Key, KeyMeta } from './createQueryKeys';
+import { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
 
 type UseQueryOptions<
   TQueryFnData = unknown,
@@ -62,14 +62,12 @@ export type CreateQuery<TConfig> = {
   ): UseQueryHook<TMeta['returnType'], TError, TData, TKey>;
 
   <
-    TBaseKey extends QueryKey,
     TKey extends QueryKey,
-    TMeta extends KeyMeta<any>,
-    TArgs extends any[],
+    TMeta extends DynamicKeyMeta<any, any>,
     TError,
     TData = TMeta['returnType'],
   >(
-    queryKey: DynamicKey<TBaseKey, TKey, TMeta, TArgs>,
-    config: QueryConfig<TConfig, TArgs, TMeta['returnType'], TError, TData, [...TBaseKey, ...TKey]>,
-  ): UseQueryHookWithArgs<TMeta['returnType'], TArgs, TError, TData, [...TBaseKey, ...TKey]>;
+    queryKey: DynamicKey<TKey, TMeta>,
+    config: QueryConfig<TConfig, TMeta['fnArgs'], TMeta['returnType'], TError, TData, TKey>,
+  ): UseQueryHookWithArgs<TMeta['returnType'], TMeta['fnArgs'], TError, TData, TKey>;
 };

@@ -5,7 +5,7 @@ import {
   QueryObserverOptions,
 } from '@tanstack/react-query';
 
-import { DynamicKey, Key, KeyMeta } from './createQueryKeys';
+import { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
 import { UseInfiniteQueryResult } from './infiniteQueryObserverResult';
 
 type GetInfiniteDataType<T extends InfiniteData<any>> = T['pages'][number];
@@ -116,23 +116,21 @@ export type CreateInfiniteQuery<TConfig> = {
   ): UseInfiniteQueryHook<GetInfiniteDataType<TMeta['returnType']>, TError, TData, TKey>;
 
   <
-    TBaseKey extends QueryKey,
     TKey extends QueryKey,
-    TArgs extends any[],
-    TMeta extends KeyMeta<InfiniteData<any>>,
+    TMeta extends DynamicKeyMeta<InfiniteData<any>, any>,
     TError = unknown,
     TData = GetInfiniteDataType<TMeta['returnType']>,
     TPageParam = unknown,
   >(
-    queryKey: DynamicKey<TBaseKey, TKey, TMeta, TArgs>,
+    queryKey: DynamicKey<TKey, TMeta>,
     config: InfiniteQueryConfig<
       TConfig,
-      TArgs,
+      TMeta['fnArgs'],
       GetInfiniteDataType<TMeta['returnType']>,
       TError,
       TData,
-      [...TBaseKey, ...TKey],
+      TKey,
       TPageParam
     >,
-  ): UseInfiniteQueryHookWithArgs<TMeta['returnType'], TArgs, TError, TData, TKey>;
+  ): UseInfiniteQueryHookWithArgs<TMeta['returnType'], TMeta['fnArgs'], TError, TData, TKey>;
 };
