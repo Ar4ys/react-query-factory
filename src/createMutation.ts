@@ -1,4 +1,4 @@
-import {
+import type {
   UseMutationOptions as TanstackUseMutationOptions,
   UseMutationResult,
 } from '@tanstack/react-query';

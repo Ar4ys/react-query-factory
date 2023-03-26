@@ -1,7 +1,7 @@
-import { QueryFunctionContext } from '@tanstack/react-query';
+import type { QueryFunctionContext } from '@tanstack/react-query';
 
-import { CreateInfiniteQuery } from './createInfiniteQuery';
-import { CreateMutation } from './createMutation';
+import type { CreateInfiniteQuery } from './createInfiniteQuery';
+import type { CreateMutation } from './createMutation';
 import { CreateQuery, createQueryFactory } from './createQuery';
 import { createQueryKeys } from './createQueryKeys';
 

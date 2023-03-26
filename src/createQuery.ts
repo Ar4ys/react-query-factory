@@ -5,7 +5,7 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 
-import { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
+import type { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
 import type { QueryFunction } from './createReactQueryFactories';
 
 type UseQueryOptions<

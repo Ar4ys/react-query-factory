@@ -1,4 +1,4 @@
-import { InfiniteData } from '@tanstack/react-query';
+import type { InfiniteData } from '@tanstack/react-query';
 
 const KeyMetadataSymbol = Symbol('KeyBuilderSymbol');
 const KeyBuilderSymbol = Symbol('KeyBuilderSymbol');

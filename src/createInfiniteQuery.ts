@@ -1,12 +1,12 @@
-import {
+import type {
   ContextOptions,
   InfiniteData,
   QueryKey,
   QueryObserverOptions,
 } from '@tanstack/react-query';
 
-import { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
-import { UseInfiniteQueryResult } from './infiniteQueryObserverResult';
+import type { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
+import type { UseInfiniteQueryResult } from './infiniteQueryObserverResult';
 
 type GetInfiniteDataType<T extends InfiniteData<any>> = T['pages'][number];
 
