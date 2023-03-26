@@ -9,7 +9,7 @@ import type { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys
 import type { QueryFunction } from './createReactQueryFactories';
 
 type UseQueryOptions<
-  TQueryFnData = any,
+  TQueryFnData = unknown,
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
@@ -21,7 +21,7 @@ type UseQueryOptions<
 type QueryConfig<
   TConfig,
   TArgs extends any[],
-  TQueryFnData = any,
+  TQueryFnData = unknown,
   TError = unknown,
   TData = TQueryFnData,
   TQueryKey extends QueryKey = QueryKey,
@@ -109,7 +109,7 @@ export const createQueryFactory = <TConfig>(
     { request: configRequest, useOptions: configUseOptions }: QueryConfig<TConfig, unknown[]>,
   ): UseQueryHook<unknown> | UseQueryHookWithArgs<unknown, unknown[]> {
     return (
-      ...args: [args: unknown[], queryOpts?: UseQueryOptions] | [queryOpts?: UseQueryOptions]
+      ...args: [args: unknown[], queryOpts?: UseQueryOptions] | [queryOpts?: UseQueryOptions<any>]
     ) => {
       const useOptions =
         typeof configUseOptions === 'function' ? configUseOptions : () => configUseOptions;
