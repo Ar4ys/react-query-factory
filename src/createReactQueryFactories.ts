@@ -2,7 +2,7 @@ import { QueryFunctionContext } from '@tanstack/react-query';
 
 import { CreateInfiniteQuery } from './createInfiniteQuery';
 import { CreateMutation } from './createMutation';
-import { CreateQuery } from './createQuery';
+import { CreateQuery, createQueryFactory } from './createQuery';
 import { createQueryKeys } from './createQueryKeys';
 
 // TODO: Pass Errors
@@ -16,12 +16,13 @@ type BaseRequestConfig = RequestInit & {
   url: string | URL;
 };
 
-type QueryFunction<TConfig = BaseRequestConfig> = (
+// TODO: Move `QueryFunction` and `MutationFunction` to separate files to avoid circular imports
+export type QueryFunction<TConfig = BaseRequestConfig> = (
   config: TConfig,
   context: Omit<QueryFunctionContext, 'pageParam'>,
 ) => unknown | Promise<unknown>;
 
-type MutationFunction<TConfig = BaseRequestConfig> = (
+export type MutationFunction<TConfig = BaseRequestConfig> = (
   config: TConfig,
   data: unknown,
 ) => unknown | Promise<unknown>;
@@ -42,7 +43,11 @@ export function createReactQueryFactories<
 >(
   options: CreateReactQueryFactoriesOptions<TQueryConfig, TMutationConfig>,
 ): ReactQueryFactories<TQueryConfig, TMutationConfig> {
-  return null!;
+  return {
+    createQuery: createQueryFactory({ queryFn: options.queryFn }),
+    createInfiniteQuery: null!,
+    createMutation: null!,
+  };
 }
 
 // -------------------- Experiments ---------------------------
