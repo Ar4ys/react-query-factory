@@ -1,7 +1,7 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 
 import { CreateInfiniteQuery, createInfiniteQueryFactory } from './createInfiniteQuery';
-import type { CreateMutation } from './createMutation';
+import { CreateMutation, createMutationFactory } from './createMutation';
 import { CreateQuery, createQueryFactory } from './createQuery';
 import { createQueryKeys } from './createQueryKeys';
 
@@ -46,7 +46,7 @@ export function createReactQueryFactories<
   return {
     createQuery: createQueryFactory({ queryFn: options.queryFn }),
     createInfiniteQuery: createInfiniteQueryFactory({ queryFn: options.queryFn }),
-    createMutation: null!,
+    createMutation: createMutationFactory({ mutationFn: options.mutationFn }),
   };
 }
 
