@@ -1,6 +1,6 @@
 import type { QueryFunctionContext } from '@tanstack/react-query';
 
-import type { CreateInfiniteQuery } from './createInfiniteQuery';
+import { CreateInfiniteQuery, createInfiniteQueryFactory } from './createInfiniteQuery';
 import type { CreateMutation } from './createMutation';
 import { CreateQuery, createQueryFactory } from './createQuery';
 import { createQueryKeys } from './createQueryKeys';
@@ -45,7 +45,7 @@ export function createReactQueryFactories<
 ): ReactQueryFactories<TQueryConfig, TMutationConfig> {
   return {
     createQuery: createQueryFactory({ queryFn: options.queryFn }),
-    createInfiniteQuery: null!,
+    createInfiniteQuery: createInfiniteQueryFactory({ queryFn: options.queryFn }),
     createMutation: null!,
   };
 }
@@ -93,10 +93,12 @@ export function createReactQueryFactories<
   const useInfiniteQuery = createInfiniteQuery(test.all1, {
     getNextPageParam: (data) => data.a,
     //                 ^?
-    request: (pageParam, test) => ({
-      //      ^?
-      fancy: pageParam.toString(),
-    }),
+    request:
+      (test) =>
+      (pageParam = 0) => ({
+        // ^?
+        fancy: pageParam.toString(),
+      }),
 
     useOptions: (test = true) => ({
       select: (data) => data.pages.flatMap((x) => x.items),
