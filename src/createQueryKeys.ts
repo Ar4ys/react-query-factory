@@ -269,8 +269,6 @@ if (import.meta.vitest) {
     }),
   }));
 
-  testKeys.byId('asd').likes.queryKey;
-
   test('Correct type', () => {
     type ExpectedTestKeys = {
       _def: KeyDef<['test'], KeyMeta<unknown>>;

@@ -2,9 +2,12 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    includeSource: ['src/**/*.ts'],
+    environment: 'happy-dom',
+    includeSource: ['src/**/*.{ts,tsx}', '!src/vitest.tsx'],
     typecheck: {
-      include: ['src/**/*.ts'],
+      include: ['src/**/*.{ts,tsx}'],
     },
+    setupFiles: './src/vitest.tsx',
+    restoreMocks: true,
   },
 });

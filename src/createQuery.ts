@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-query';
 
 import type { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
-import type { QueryFunction } from './createReactQueryFactories';
+import { QueryFunction } from './createReactQueryFactories';
 
 type UseQueryOptions<
   TQueryFnData = unknown,
@@ -94,9 +94,9 @@ type CreateQueryFactoryOptions<TConfig> = {
 // TODO: Unit tests
 // TODO: Query helpers
 // TODO: Documentation
-export const createQueryFactory = <TConfig>(
+export function createQueryFactory<TConfig>(
   options: CreateQueryFactoryOptions<TConfig>,
-): CreateQuery<TConfig> => {
+): CreateQuery<TConfig> {
   function createQuery(
     queryKey: Key<QueryKey, KeyMeta<any>>,
     config: QueryConfig<TConfig, unknown[]>,
@@ -171,4 +171,146 @@ export const createQueryFactory = <TConfig>(
   }
 
   return createQuery;
-};
+}
+
+if (import.meta.vitest) {
+  const { test, expect, vi, describe } = import.meta.vitest;
+  const { renderHook, waitFor } = await import('@testing-library/react');
+  const { wrapper } = await import('./vitest');
+  const { createQueryKeys } = await import('./createQueryKeys');
+
+  type Config = typeof requestConfig;
+  const requestConfig = {
+    url: 'url',
+  };
+
+  const keys = createQueryKeys('test', (key) => ({
+    a: key<Config | string | number>(),
+  }));
+
+  const queryFnSpy = vi.fn((config: Config | string | number) => config);
+
+  const createQuery = createQueryFactory({
+    queryFn: queryFnSpy,
+  });
+
+  describe('callbacks', async () => {
+    const onSuccessSpy = vi.fn();
+    const onSuccessOverloadSpy = vi.fn();
+    const onErrorSpy = vi.fn();
+    const onErrorOverloadSpy = vi.fn();
+    const onSettledSpy = vi.fn();
+    const onSettledOverloadSpy = vi.fn();
+
+    const useTest = createQuery(keys.a, {
+      request: requestConfig,
+      useOptions: () => ({
+        onSuccess: onSuccessSpy,
+        onError: onErrorSpy,
+        onSettled: onSettledSpy,
+      }),
+    });
+
+    test('onSuccess and onSettled', async () => {
+      const { result } = renderHook(
+        () =>
+          useTest({
+            onSuccess: onSuccessOverloadSpy,
+            onError: onErrorOverloadSpy,
+            onSettled: onSettledOverloadSpy,
+          }),
+        { wrapper },
+      );
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toBe(requestConfig);
+      expect(onSuccessSpy).toBeCalled();
+      expect(onSuccessOverloadSpy).toBeCalled();
+      expect(onErrorSpy).not.toBeCalled();
+      expect(onErrorOverloadSpy).not.toBeCalled();
+      expect(onSettledSpy).toBeCalled();
+      expect(onSettledOverloadSpy).toBeCalled();
+    });
+
+    test('onError and onSettled', async () => {
+      queryFnSpy.mockImplementationOnce(() => {
+        throw 'error';
+      });
+
+      const { result } = renderHook(
+        () =>
+          useTest({
+            onSuccess: onSuccessOverloadSpy,
+            onError: onErrorOverloadSpy,
+            onSettled: onSettledOverloadSpy,
+          }),
+        { wrapper },
+      );
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.error).toBe('error');
+      expect(onSuccessSpy).not.toBeCalled();
+      expect(onSuccessOverloadSpy).not.toBeCalled();
+      expect(onErrorSpy).toBeCalled();
+      expect(onErrorOverloadSpy).toBeCalled();
+      expect(onSettledSpy).toBeCalled();
+      expect(onSettledOverloadSpy).toBeCalled();
+    });
+  });
+
+  describe('enabled', () => {
+    test('useOptions.enabled is false', () => {
+      const useTest = createQuery(keys.a, {
+        request: requestConfig,
+        useOptions: () => ({
+          enabled: false,
+        }),
+      });
+
+      const { result } = renderHook(() => useTest({ enabled: true }), { wrapper });
+      expect(result.current.fetchStatus).toBe('idle');
+    });
+
+    test('request is falsy', () => {
+      const useTest = createQuery(keys.a, {
+        request: () => false,
+        useOptions: () => ({
+          enabled: true,
+        }),
+      });
+
+      const { result } = renderHook(() => useTest({ enabled: true }), { wrapper });
+      expect(result.current.fetchStatus).toBe('idle');
+    });
+
+    test('queryOpts.enabled is false', () => {
+      const useTest = createQuery(keys.a, {
+        request: requestConfig,
+        useOptions: () => ({
+          enabled: true,
+        }),
+      });
+
+      const { result } = renderHook(() => useTest({ enabled: false }), { wrapper });
+      expect(result.current.fetchStatus).toBe('idle');
+    });
+
+    test('request as an empty string should not set "enabled: false"', () => {
+      const useTest = createQuery(keys.a, {
+        request: '',
+      });
+
+      const { result } = renderHook(() => useTest(), { wrapper });
+      expect(result.current.fetchStatus).not.toBe('idle');
+    });
+
+    test('request as a zero should not set "enabled: false"', () => {
+      const useTest = createQuery(keys.a, {
+        request: '',
+      });
+
+      const { result } = renderHook(() => useTest(), { wrapper });
+      expect(result.current.fetchStatus).not.toBe('idle');
+    });
+  });
+}
