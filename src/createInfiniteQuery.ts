@@ -194,7 +194,7 @@ export const createInfiniteQueryFactory = <TConfig>(
          * `TConfig`, in which case empty string and zero will be misinterpreted as falsy value and
          * will disable query (which is undesirable).
          */
-        (request ?? true) !== false;
+        (request ?? false) !== false;
 
       return useInfiniteQuery<any>({
         ...queryOptions,

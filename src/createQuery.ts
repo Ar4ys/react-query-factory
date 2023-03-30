@@ -138,7 +138,7 @@ export function createQueryFactory<TConfig>(
          * `TConfig`, in which case empty string and zero will be misinterpreted as falsy value and
          * will disable query (which is undesirable).
          */
-        (request ?? true) !== false;
+        (request ?? false) !== false;
 
       return useQuery<any>({
         ...queryOptions,
@@ -273,7 +273,7 @@ if (import.meta.vitest) {
 
     test('request is falsy', () => {
       const useTest = createQuery(keys.a, {
-        request: () => false,
+        request: (id?: string) => id && { url: `/chats/` },
         useOptions: () => ({
           enabled: true,
         }),
