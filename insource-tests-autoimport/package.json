@@ -1,0 +1,13 @@
+{
+  "name": "insource-tests-autoimport",
+  "version": "0.0.1",
+  "license": "ISC",
+  "main": "./dist",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "typescript": "^5.0.2"
+  }
+}
