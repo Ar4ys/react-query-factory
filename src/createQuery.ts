@@ -273,7 +273,7 @@ if (import.meta.vitest) {
 
     test('request is falsy', () => {
       const useTest = createQuery(keys.a, {
-        request: (id?: string) => id && { url: `/chats/` },
+        request: () => null,
         useOptions: () => ({
           enabled: true,
         }),
@@ -306,7 +306,7 @@ if (import.meta.vitest) {
 
     test('request as a zero should not set "enabled: false"', () => {
       const useTest = createQuery(keys.a, {
-        request: '',
+        request: 0,
       });
 
       const { result } = renderHook(() => useTest(), { wrapper });
