@@ -30,7 +30,6 @@ type CreateMutationFactoryOptions<TConfig> = {
   mutationFn: MutationFunction<TConfig>;
 };
 
-// TODO: Unit tests
 // TODO: Mutation helpers (what "mutation helpers" can be?)
 // TODO: Documentation
 export const createMutationFactory = <TConfig>(
@@ -76,3 +75,95 @@ export const createMutationFactory = <TConfig>(
 
   return createMutation;
 };
+
+if (import.meta.vitest) {
+  const { test, expect, vi, describe } = import.meta.vitest;
+  const { renderHook, waitFor } = await import('@testing-library/react');
+  const { wrapper } = await import('./vitest');
+
+  type Config = typeof requestConfig;
+  const requestConfig = {
+    url: 'url',
+  };
+
+  const mutationFnSpy = vi.fn((config: Config | string | number) => config);
+
+  const createMutation = createMutationFactory({
+    mutationFn: mutationFnSpy,
+  });
+
+  describe('callbacks', async () => {
+    const onMutateSpy = vi.fn();
+    const onMutateOverloadSpy = vi.fn();
+    const onSuccessSpy = vi.fn();
+    const onSuccessOverloadSpy = vi.fn();
+    const onErrorSpy = vi.fn();
+    const onErrorOverloadSpy = vi.fn();
+    const onSettledSpy = vi.fn();
+    const onSettledOverloadSpy = vi.fn();
+
+    const useTest = createMutation({
+      request: requestConfig,
+      useOptions: () => ({
+        onMutate: onMutateSpy,
+        onSuccess: onSuccessSpy,
+        onError: onErrorSpy,
+        onSettled: onSettledSpy,
+      }),
+    });
+
+    test('onMutation, onSuccess and onSettled', async () => {
+      const { result } = renderHook(
+        () =>
+          useTest({
+            onMutate: onMutateOverloadSpy,
+            onSuccess: onSuccessOverloadSpy,
+            onError: onErrorOverloadSpy,
+            onSettled: onSettledOverloadSpy,
+          }),
+        { wrapper },
+      );
+
+      result.current.mutate(requestConfig);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toBe(requestConfig);
+      expect(onMutateSpy).toBeCalled();
+      expect(onMutateOverloadSpy).toBeCalled();
+      expect(onSuccessSpy).toBeCalled();
+      expect(onSuccessOverloadSpy).toBeCalled();
+      expect(onErrorSpy).not.toBeCalled();
+      expect(onErrorOverloadSpy).not.toBeCalled();
+      expect(onSettledSpy).toBeCalled();
+      expect(onSettledOverloadSpy).toBeCalled();
+    });
+
+    test('onMutation, onError and onSettled', async () => {
+      mutationFnSpy.mockImplementationOnce(() => {
+        throw 'error';
+      });
+
+      const { result } = renderHook(
+        () =>
+          useTest({
+            onMutate: onMutateOverloadSpy,
+            onSuccess: onSuccessOverloadSpy,
+            onError: onErrorOverloadSpy,
+            onSettled: onSettledOverloadSpy,
+          }),
+        { wrapper },
+      );
+
+      result.current.mutate(requestConfig);
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.error).toBe('error');
+      expect(onMutateSpy).toBeCalled();
+      expect(onMutateOverloadSpy).toBeCalled();
+      expect(onSuccessSpy).not.toBeCalled();
+      expect(onSuccessOverloadSpy).not.toBeCalled();
+      expect(onErrorSpy).toBeCalled();
+      expect(onErrorOverloadSpy).toBeCalled();
+      expect(onSettledSpy).toBeCalled();
+      expect(onSettledOverloadSpy).toBeCalled();
+    });
+  });
+}
