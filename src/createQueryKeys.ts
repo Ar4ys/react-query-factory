@@ -157,6 +157,7 @@ function createKey<T extends ValidKeyValue[]>(
   return createKeyDef({ queryKey }, params as { dynamic: any });
 }
 
+// TODO: Refactor
 function mapFactorySchema<TKey extends ValidKeyValue[], TSchema extends FactorySchema>(
   queryKey: TKey,
   schema: TSchema,

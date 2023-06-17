@@ -1,16 +1,30 @@
 import type {
+  ContextOptions,
   FetchNextPageOptions,
   FetchPreviousPageOptions,
+  InfiniteData,
+  QueryKey,
   QueryObserverBaseResult,
+  QueryObserverOptions,
 } from '@tanstack/react-query';
 
 /**
- * We are forced to copy `InfiniteQueryObserverResult` declaration here (instead of directly using
- * it), because this is the only way to fix `TData` bug (`select` breaks because `TData` must be
- * `InfiniteData` and you cannot change it).
+ * We are forced to copy `UseInfiniteQueryOptions` and `InfiniteQueryObserverResult` declarations
+ * here (instead of directly using it), because this is the only way to fix `TData` bug (`select`
+ * breaks because `TData` must be `InfiniteData` and you cannot change it).
  *
  * It is (probably) fixed in react-query v5-alpha
  */
+// TODO: Remove support for `onSuccess`, `onError` and `onSettled` as they are deprecated
+// and will be removed in react-query@5
+export type UseInfiniteQueryOptions<
+  TQueryFnData = unknown,
+  TError = unknown,
+  TData = InfiniteData<TQueryFnData>,
+  TQueryKey extends QueryKey = QueryKey,
+> = ContextOptions &
+  QueryObserverOptions<TQueryFnData, TError, TData, InfiniteData<TQueryFnData>, TQueryKey>;
+
 interface InfiniteQueryObserverBaseResult<TData = unknown, TError = unknown>
   extends QueryObserverBaseResult<TData, TError> {
   fetchNextPage: (

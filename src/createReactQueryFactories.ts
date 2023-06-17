@@ -77,17 +77,21 @@ export function createReactQueryFactories<
   }));
 
   const useTestQuery = createQuery(test.lol1, {
-    request: {
+    request: (test) => ({
       fancy: 'lol',
-    },
-    useOptions: {
-      select: (data) => data.test,
-    },
+    }),
+    useOptions: ([test]) => ({
+      // select: (data) => data.test,
+      onSuccess(data: any) {},
+    }),
   });
 
-  const { data } = useTestQuery([1], {
+  const { data } = useTestQuery({
     //    ^?
-    select: (data) => data.test2,
+    args: [1],
+    // select: (data) => data.test2,
+    // onSuccess(data: any) {},
+    // ctx: { a: 'asd' },
   });
 
   const useInfiniteQuery = createInfiniteQuery(test.all1, {
@@ -100,14 +104,16 @@ export function createReactQueryFactories<
         fancy: pageParam.toString(),
       }),
 
-    useOptions: (test = true) => ({
+    useOptions: ([test = true]) => ({
       select: (data) => data.pages.flatMap((x) => x.items),
       //       ^?
     }),
   });
 
-  const { data: infiniteData } = useInfiniteQuery([true]);
-  //            ^?
+  const { data: infiniteData } = useInfiniteQuery({
+    //            ^?
+    args: [true],
+  });
 
   type TestMutationInput = { lol: string };
   type TestMutationResponse = { olo: number };

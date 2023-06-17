@@ -1,15 +1,14 @@
-import {
-  ContextOptions,
-  InfiniteData,
-  QueryKey,
-  QueryObserverOptions,
-  useInfiniteQuery,
-} from '@tanstack/react-query';
+import { InfiniteData, useInfiniteQuery } from '@tanstack/react-query';
 
-import type { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
+import type { GetKeyMeta, GetKeyValue, KeyConstraint } from './createQueryKeys';
 import type { QueryFunction } from './createReactQueryFactories';
-import type { UseInfiniteQueryResult } from './infiniteQueryObserverResult';
+import type {
+  UseInfiniteQueryOptions as TanstackUseInfiniteQueryOptions,
+  UseInfiniteQueryResult,
+} from './tanstack-fixes';
+import { NoInfer, PickRequired, QueryArgs, QueryContext } from './utils';
 
+// TODO: rename
 type GetInfiniteDataType<T extends InfiniteData<any>> = T['pages'][number];
 
 type GetPreviousPageParamFunction<TQueryFnData = unknown, TPageParam = unknown> = (
@@ -22,34 +21,43 @@ type GetNextPageParamFunction<TQueryFnData = unknown, TPageParam = unknown> = (
   allPages: TQueryFnData[],
 ) => TPageParam;
 
-/**
- * We are forced to copy `UseInfiniteQueryOptions` declaration here (instead of directly using it),
- * because this is the only way to fix `TData` bug (`select` breaks because `TData` must be
- * `InfiniteData` and you cannot change it).
- *
- * It is (probably) fixed in react-query v5-alpha
- */
-// TODO: Remove support for `onSuccess`, `onError` and `onSettled` as they are deprecated
-// and will be removed in react-query@5
-type UseInfiniteQueryOptions<
-  TQueryFnData = unknown,
+type InfiniteQueryOptions<
+  TKey extends KeyConstraint,
   TError = unknown,
-  TData = InfiniteData<TQueryFnData>,
-  TQueryKey extends QueryKey = QueryKey,
-> = ContextOptions &
-  Omit<
-    QueryObserverOptions<TQueryFnData, TError, TData, InfiniteData<TQueryFnData>, TQueryKey>,
-    'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey'
-  >;
+  TData = GetKeyMeta<TKey>['returnType'],
+> = Omit<
+  TanstackUseInfiniteQueryOptions<
+    GetInfiniteDataType<GetKeyMeta<TKey>['returnType']>,
+    TError,
+    NoInfer<TData>,
+    GetKeyValue<TKey>
+  >,
+  'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey' | 'select'
+> & {
+  /**
+   * This option can be used to transform or select a part of the data returned by the query
+   * function.
+   */
+  select?: (data: GetKeyMeta<TKey>['returnType']) => TData;
+};
+
+type UseInfiniteQueryOptions<
+  TKey extends KeyConstraint,
+  TError = unknown,
+  TData = GetKeyMeta<TKey>['returnType'],
+  TContext = undefined,
+  // TODO: Add support for select override
+> = Omit<InfiniteQueryOptions<TKey, TError, TData>, 'select'> &
+  QueryContext<TContext> &
+  QueryArgs<GetKeyMeta<TKey>['fnArgs']>;
 
 type InfiniteQueryConfig<
   TConfig,
-  TArgs extends any[],
-  TQueryFnData = unknown,
+  TKey extends KeyConstraint,
   TError = unknown,
-  TData = InfiniteData<TQueryFnData>,
-  TQueryKey extends QueryKey = QueryKey,
+  TData = GetKeyMeta<TKey>['returnType'],
   TPageParam = unknown,
+  TContext = undefined,
 > = {
   /**
    * TODO: Should we give user ability to pass `TConfig` object directly?
@@ -58,86 +66,66 @@ type InfiniteQueryConfig<
    * be able to use it in `queryFn` (maybe we should create `infiniteQueryFn`?) in
    * `createReactQueryFactories`. In that case there is no need to force `request` to be function
    * here.
+   *
+   * TODO: Should we replace this function in function pattern with `(args, pageParam) => TConfig`?
+   *
+   * That way there will be no need for nested functions (which is easier to use) and `request` will
+   * be similar to `useOptions` (`args` is an array that needs to be destructed). If this is
+   * `approved` - the same needs to be done in `QueryConfig`
    */
   request: (
-    ...args: TArgs
+    ...args: GetKeyMeta<TKey>['fnArgs']
   ) => ((pageParam: TPageParam | undefined) => TConfig) | undefined | null | false;
+
   useOptions?:
-    | UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey>
-    | ((...args: TArgs) => UseInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey>);
+    | InfiniteQueryOptions<TKey, TError, TData>
+    | ((
+        args: GetKeyMeta<TKey>['fnArgs'],
+        context: TContext,
+      ) => InfiniteQueryOptions<TKey, TError, TData>);
 
   /**
    * This function can be set to automatically get the previous cursor for infinite queries. The
    * result will also be used to determine the value of `hasPreviousPage`.
    */
-  getPreviousPageParam?: GetPreviousPageParamFunction<TQueryFnData, TPageParam>;
+  getPreviousPageParam?: GetPreviousPageParamFunction<
+    GetInfiniteDataType<GetKeyMeta<TKey>['returnType']>,
+    TPageParam
+  >;
 
   /**
    * This function can be set to automatically get the next cursor for infinite queries. The result
    * will also be used to determine the value of `hasNextPage`.
    */
-  getNextPageParam?: GetNextPageParamFunction<TQueryFnData, TPageParam>;
+  getNextPageParam?: GetNextPageParamFunction<
+    GetInfiniteDataType<GetKeyMeta<TKey>['returnType']>,
+    TPageParam
+  >;
 };
 
-type UseInfiniteQueryHook<
-  TResponse,
-  TError = unknown,
-  TData = InfiniteData<TResponse>,
-  TQueryKey extends QueryKey = QueryKey,
-> = <TTData = TData>(
-  queryOpts?: UseInfiniteQueryOptions<TResponse, TError, TTData, TQueryKey>,
+type UseInfiniteQueryHookParams<
+  TKey extends KeyConstraint,
+  TError,
+  TData,
+  TContext,
+> = keyof PickRequired<UseInfiniteQueryOptions<TKey, TError, TData, TContext>> extends never
+  ? [queryOpts?: UseInfiniteQueryOptions<TKey, TError, TData, TContext>]
+  : [queryOpts: UseInfiniteQueryOptions<TKey, TError, TData, TContext>];
+
+type UseInfiniteQueryHook<TKey extends KeyConstraint, TError, TData, TContext> = <TTData = TData>(
+  ...args: UseInfiniteQueryHookParams<TKey, TError, TTData, TContext>
 ) => UseInfiniteQueryResult<TTData, TError>;
 
-type UseInfiniteQueryHookWithArgs<
-  TResponse,
-  TArgs,
+export type CreateInfiniteQuery<TConfig> = <
+  TKey extends KeyConstraint,
   TError = unknown,
-  TData = InfiniteData<TResponse>,
-  TQueryKey extends QueryKey = QueryKey,
-> = <TTData = TData>(
-  args: TArgs,
-  queryOpts?: UseInfiniteQueryOptions<TResponse, TError, TTData, TQueryKey>,
-) => UseInfiniteQueryResult<TTData, TError>;
-
-export type CreateInfiniteQuery<TConfig> = {
-  <
-    TKey extends QueryKey,
-    TMeta extends KeyMeta<InfiniteData<any>>,
-    TError = unknown,
-    TData = GetInfiniteDataType<TMeta['returnType']>,
-    TPageParam = unknown,
-  >(
-    queryKey: Key<any, TMeta>,
-    config: InfiniteQueryConfig<
-      TConfig,
-      [],
-      GetInfiniteDataType<TMeta['returnType']>,
-      TError,
-      TData,
-      TKey,
-      TPageParam
-    >,
-  ): UseInfiniteQueryHook<GetInfiniteDataType<TMeta['returnType']>, TError, TData, TKey>;
-
-  <
-    TKey extends QueryKey,
-    TMeta extends DynamicKeyMeta<InfiniteData<any>, any>,
-    TError = unknown,
-    TData = GetInfiniteDataType<TMeta['returnType']>,
-    TPageParam = unknown,
-  >(
-    queryKey: DynamicKey<TKey, TMeta>,
-    config: InfiniteQueryConfig<
-      TConfig,
-      TMeta['fnArgs'],
-      GetInfiniteDataType<TMeta['returnType']>,
-      TError,
-      TData,
-      TKey,
-      TPageParam
-    >,
-  ): UseInfiniteQueryHookWithArgs<TMeta['returnType'], TMeta['fnArgs'], TError, TData, TKey>;
-};
+  TData = GetKeyMeta<TKey>['returnType'],
+  TPageParam = unknown,
+  TContext = undefined,
+>(
+  queryKey: TKey,
+  config: InfiniteQueryConfig<TConfig, TKey, TError, TData, TPageParam, TContext>,
+) => UseInfiniteQueryHook<TKey, TError, TData, TContext>;
 
 type CreateInfiniteQueryFactoryOptions<TConfig> = {
   queryFn: QueryFunction<TConfig>;
@@ -148,43 +136,26 @@ type CreateInfiniteQueryFactoryOptions<TConfig> = {
 export const createInfiniteQueryFactory = <TConfig>(
   options: CreateInfiniteQueryFactoryOptions<TConfig>,
 ): CreateInfiniteQuery<TConfig> => {
-  function createQuery(
-    queryKey: Key<QueryKey, KeyMeta<any>>,
-    config: InfiniteQueryConfig<TConfig, unknown[]>,
-  ): UseInfiniteQueryHook<unknown>;
-
-  function createQuery(
-    queryKey: DynamicKey<QueryKey, DynamicKeyMeta<any, any>>,
-    config: InfiniteQueryConfig<TConfig, unknown[]>,
-  ): UseInfiniteQueryHookWithArgs<unknown, unknown[]>;
-
-  function createQuery(
-    queryKey: Key<QueryKey, KeyMeta<any>> | DynamicKey<QueryKey, DynamicKeyMeta<any, any>>,
+  return (
+    queryKey: KeyConstraint,
     {
       request: configRequest,
       useOptions: configUseOptions,
       getNextPageParam,
       getPreviousPageParam,
-    }: InfiniteQueryConfig<TConfig, unknown[]>,
-  ): UseInfiniteQueryHook<unknown> | UseInfiniteQueryHookWithArgs<unknown, unknown[]> {
+    }: InfiniteQueryConfig<TConfig, any, any, any, any, any>,
+  ): UseInfiniteQueryHook<any, any, any, any> => {
     return (
-      ...args:
-        | [args: unknown[], queryOpts?: UseInfiniteQueryOptions]
-        | [queryOpts?: UseInfiniteQueryOptions<unknown, unknown, any>]
+      {
+        args: queryKeyArgs = [],
+        ctx: queryContext,
+        ...queryOptionsOverrides
+      }: UseInfiniteQueryOptions<any> = {} as any,
     ): any => {
       const useOptions =
         typeof configUseOptions === 'function' ? configUseOptions : () => configUseOptions;
       const queryKeyFn = typeof queryKey === 'function' ? queryKey : () => queryKey;
-      let queryKeyArgs: unknown[] = [];
-      let queryOptionsOverrides: UseInfiniteQueryOptions | undefined;
-
-      if (Array.isArray(args[0])) {
-        [queryKeyArgs, queryOptionsOverrides] = args;
-      } else {
-        [queryOptionsOverrides] = args;
-      }
-
-      const queryOptions = useOptions?.(...queryKeyArgs);
+      const queryOptions = useOptions?.(queryKeyArgs, queryContext);
       const request = configRequest(...queryKeyArgs);
 
       const isQueryEnabled =
@@ -197,19 +168,19 @@ export const createInfiniteQueryFactory = <TConfig>(
          */
         (request ?? false) !== false;
 
-      return useInfiniteQuery<any>({
+      return useInfiniteQuery({
         ...queryOptions,
         ...queryOptionsOverrides,
         enabled: isQueryEnabled,
         queryKey: queryKeyFn(...queryKeyArgs).queryKey,
-        queryFn(context) {
+        queryFn(requestConfig) {
           if (!request) return;
           const contextWithoutPageParam = {
-            ...context,
+            ...requestConfig,
             pageParam: undefined,
           };
           delete contextWithoutPageParam.pageParam;
-          return options.queryFn(request(context.pageParam), contextWithoutPageParam);
+          return options.queryFn(request(requestConfig.pageParam), contextWithoutPageParam);
         },
         getNextPageParam,
         getPreviousPageParam,
@@ -227,25 +198,27 @@ export const createInfiniteQueryFactory = <TConfig>(
         },
       });
     };
-  }
-
-  return createQuery;
+  };
 };
 
 if (import.meta.vitest) {
   const { test, expect, vi, describe } = import.meta.vitest;
   const { renderHook, waitFor } = await import('@testing-library/react');
+  const { assertType } = await import('vitest');
   const { wrapper } = await import('./vitest');
   const { createQueryKeys } = await import('./createQueryKeys');
 
   type Config = ReturnType<typeof requestConfig>;
   const requestConfig = (pageParam: unknown) => ({
     url: 'url',
-    pageParam
+    pageParam,
   });
 
   const keys = createQueryKeys('test', (key) => ({
-    a: key<InfiniteData<Config | string | number>>(),
+    static: key.infinite<Config | string | number>(),
+    dynamic: key.infinite.dynamic<Config | string | number, [test: string]>(),
+    dynamicOptional: key.infinite.dynamic<Config | string | number, [test?: string]>(),
+    simple: key.infinite<number>(),
   }));
 
   const queryFnSpy = vi.fn((config: Config | string | number) => config);
@@ -262,7 +235,7 @@ if (import.meta.vitest) {
     const onSettledSpy = vi.fn();
     const onSettledOverloadSpy = vi.fn();
 
-    const useTest = createInfiniteQuery(keys.a, {
+    const useTest = createInfiniteQuery(keys.static, {
       request: () => requestConfig,
       useOptions: () => ({
         onSuccess: onSuccessSpy,
@@ -285,7 +258,7 @@ if (import.meta.vitest) {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toStrictEqual({
         pageParams: [undefined],
-        pages: [requestConfig(undefined)]
+        pages: [requestConfig(undefined)],
       });
       expect(onSuccessSpy).toBeCalled();
       expect(onSuccessOverloadSpy).toBeCalled();
@@ -323,7 +296,7 @@ if (import.meta.vitest) {
 
   describe('enabled', () => {
     test('useOptions.enabled is false', () => {
-      const useTest = createInfiniteQuery(keys.a, {
+      const useTest = createInfiniteQuery(keys.static, {
         request: () => requestConfig,
         useOptions: () => ({
           enabled: false,
@@ -335,7 +308,7 @@ if (import.meta.vitest) {
     });
 
     test('request is falsy', () => {
-      const useTest = createInfiniteQuery(keys.a, {
+      const useTest = createInfiniteQuery(keys.static, {
         request: () => null,
         useOptions: () => ({
           enabled: true,
@@ -347,7 +320,7 @@ if (import.meta.vitest) {
     });
 
     test('queryOpts.enabled is false', () => {
-      const useTest = createInfiniteQuery(keys.a, {
+      const useTest = createInfiniteQuery(keys.static, {
         request: () => requestConfig,
         useOptions: () => ({
           enabled: true,
@@ -357,5 +330,219 @@ if (import.meta.vitest) {
       const { result } = renderHook(() => useTest({ enabled: false }), { wrapper });
       expect(result.current.fetchStatus).toBe('idle');
     });
+  });
+
+  describe('dynamic queries', () => {
+    test('should be able to pass queryKey arguments', async () => {
+      const useOptionsSpy = vi.fn();
+      const useTest = createInfiniteQuery(keys.dynamic, {
+        request: (testArg) => () => testArg,
+        useOptions: useOptionsSpy,
+      });
+
+      const { result } = renderHook(() => useTest({ args: ['test'] }), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(queryFnSpy.mock.lastCall?.[0]).toBe('test');
+      expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual(['test']);
+    });
+
+    test('should be able to omit `queryOpts` and/or `queryKey` args if query is "static"', async () => {
+      const requestSpy = vi.fn(() => requestConfig);
+      const useOptionsSpy = vi.fn<[[]]>();
+      const useTest = createInfiniteQuery(keys.static, {
+        request: requestSpy,
+        useOptions: useOptionsSpy,
+      });
+
+      {
+        const { result } = renderHook(() => useTest({}), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+      {
+        const { result } = renderHook(() => useTest(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+    });
+
+    test('should be able to omit `queryOpts` and/or `queryKey` args if they are optional', async () => {
+      const requestSpy = vi.fn((test?: string) => () => 1);
+      const useOptionsSpy = vi.fn<[[test?: string]]>();
+      const useTest = createInfiniteQuery(keys.dynamicOptional, {
+        request: requestSpy,
+        useOptions: useOptionsSpy,
+      });
+
+      {
+        const { result } = renderHook(() => useTest({ args: [] }), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+      {
+        const { result } = renderHook(() => useTest({}), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+      {
+        const { result } = renderHook(() => useTest(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+    });
+
+    test('should NOT be able to omit `queryOpts` and/or `queryKey` args if they are required', () => {
+      const useTest = createInfiniteQuery(keys.dynamic, {
+        request: () => requestConfig,
+      });
+
+      // @ts-expect-error
+      renderHook(() => useTest(), { wrapper });
+      // @ts-expect-error
+      renderHook(() => useTest({}), { wrapper });
+      // @ts-expect-error
+      renderHook(() => useTest({ args: [] }), { wrapper });
+    });
+  });
+
+  describe('context', () => {
+    test('should be able to pass context', async () => {
+      const useOptionsSpy = vi.fn<[queryArgs: [test: string], ctx: string]>();
+      const useTest = createInfiniteQuery(keys.dynamic, {
+        request: () => requestConfig,
+        useOptions: useOptionsSpy,
+      });
+
+      const { result } = renderHook(() => useTest({ args: ['test'], ctx: 'ctx-test' }), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(useOptionsSpy.mock.lastCall).toStrictEqual([['test'], 'ctx-test']);
+    });
+
+    test('should be able to omit `ctx` if it is optional', async () => {
+      const useOptionsSpy = vi.fn<[queryArgs: [test: string], ctx?: string]>();
+      const useTest = createInfiniteQuery(keys.dynamic, {
+        request: () => requestConfig,
+        useOptions: useOptionsSpy,
+      });
+
+      const { result } = renderHook(() => useTest({ args: ['test'] }), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(useOptionsSpy.mock.lastCall).toStrictEqual([['test'], undefined]);
+    });
+
+    test('should NOT be able to omit query argument or `ctx` if `ctx` is required', () => {
+      const useOptionsSpy = vi.fn<[queryArgs: [], ctx: string]>();
+      const useTest = createInfiniteQuery(keys.static, {
+        request: () => requestConfig,
+        useOptions: useOptionsSpy,
+      });
+
+      // @ts-expect-error
+      renderHook(() => useTest({}), { wrapper });
+      // @ts-expect-error
+      renderHook(() => useTest(), { wrapper });
+    });
+  });
+
+  describe('typing', () => {
+    test('`onSuccess`, `onSettled` and others should NOT affect type of `data`', () => {
+      const useTest = createInfiniteQuery(keys.simple, {
+        request: () => requestConfig,
+        useOptions: {
+          onError(error: unknown) {},
+          // @ts-expect-error
+          onSettled(data?: string) {},
+          // @ts-expect-error
+          onSuccess(data: string) {},
+        },
+      });
+
+      const { result } = renderHook(() => useTest(), { wrapper });
+
+      assertType<InfiniteData<number> | undefined>(result.current.data);
+    });
+
+    test('`onSuccess`, `onSettled` and others overrides should NOT affect type of `data`', () => {
+      const useTest = createInfiniteQuery(keys.simple, {
+        request: () => requestConfig,
+        useOptions: {
+          onError(error: unknown) {},
+          // @ts-expect-error
+          onSettled(data?: string) {},
+          // @ts-expect-error
+          onSuccess(data: string) {},
+        },
+      });
+
+      const { result } = renderHook(
+        () =>
+          useTest({
+            onError(error: unknown) {},
+            // @ts-expect-error
+            onSettled(data?: string) {},
+            // @ts-expect-error
+            onSuccess(data: string) {},
+          }),
+        { wrapper },
+      );
+
+      assertType<InfiniteData<number> | undefined>(result.current.data);
+    });
+
+    test('`select` should affect type of `data`', () => {
+      const useTest = createInfiniteQuery(keys.simple, {
+        request: () => requestConfig,
+        useOptions: {
+          select: () => true as const,
+          onError(error: unknown) {},
+          // @ts-expect-error
+          onSettled(data?: string) {},
+          // @ts-expect-error
+          onSuccess(data: string) {},
+        },
+      });
+
+      const { result } = renderHook(() => useTest(), { wrapper });
+
+      assertType<true | undefined>(result.current.data);
+    });
+
+    // test('`select` override should affect type of `data`', () => {
+    //   const useTest = createInfiniteQuery(keys.simple, {
+    //     request: () => requestConfig,
+    //     useOptions: {
+    //       select: (data) => true as const,
+    //       onError(error: unknown) {},
+    //       // @ts-expect-error
+    //       onSettled(data?: string) {},
+    //       // @ts-expect-error
+    //       onSuccess(data: string) {},
+    //     },
+    //   });
+
+    //   const { result } = renderHook(
+    //     () =>
+    //       useTest({
+    //         select: () => false as const,
+    //         onError(error: unknown) {},
+    //         // @ts-expect-error
+    //         onSettled(data?: string) {},
+    //         // @ts-expect-error
+    //         onSuccess(data: string) {},
+    //       }),
+    //     { wrapper },
+    //   );
+
+    //   assertType<false | undefined>(result.current.data);
+    // });
   });
 }

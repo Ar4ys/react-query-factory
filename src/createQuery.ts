@@ -6,11 +6,7 @@ import {
 
 import type { GetKeyMeta, GetKeyValue, KeyConstraint } from './createQueryKeys';
 import type { QueryFunction } from './createReactQueryFactories';
-import { NoInfer, PickRequired, PickRequiredTuple } from './utils';
-
-// TODO: Should we replace `ctx` with `meta` from react-query?
-type QueryContext<T> = T extends undefined ? { ctx?: T } : { ctx: T };
-type QueryArgs<T extends any[]> = PickRequiredTuple<T> extends [] ? { args?: T } : { args: T };
+import { NoInfer, PickRequired, QueryArgs, QueryContext } from './utils';
 
 // TODO: Remove support for `onSuccess`, `onError` and `onSettled` as they are deprecated
 // and will be removed in react-query@5
@@ -91,6 +87,7 @@ type QueryConfig<
    * present and `Promise<TData> | undefined` if request config is possibly absent)
    */
   request: ((...args: GetKeyMeta<TKey>['fnArgs']) => TConfig | undefined | null | false) | TConfig;
+
   useOptions?:
     | QueryOptions<TKey, TError, TData>
     | ((args: GetKeyMeta<TKey>['fnArgs'], context: TContext) => QueryOptions<TKey, TError, TData>);
@@ -127,15 +124,22 @@ export function createQueryFactory<TConfig>(
 ): CreateQuery<TConfig> {
   return (
     queryKey: KeyConstraint,
-    { request: configRequest, useOptions: configUseOptions }: QueryConfig<any, any, any, any, any>,
+    {
+      request: configRequest,
+      useOptions: configUseOptions,
+    }: QueryConfig<TConfig, any, any, any, any>,
   ): UseQueryHook<any, any, any, any> => {
     return (
-      { args: queryKeyArgs = [], ...queryOptionsOverrides }: UseQueryOptions<any> = {} as any,
+      {
+        args: queryKeyArgs = [],
+        ctx: queryContext,
+        ...queryOptionsOverrides
+      }: UseQueryOptions<any> = {} as any,
     ) => {
       const useOptions =
         typeof configUseOptions === 'function' ? configUseOptions : () => configUseOptions;
       const queryKeyFn = typeof queryKey === 'function' ? queryKey : () => queryKey;
-      const queryOptions = useOptions?.(queryKeyArgs, queryOptionsOverrides?.ctx);
+      const queryOptions = useOptions?.(queryKeyArgs, queryContext);
       const request =
         configRequest instanceof Function ? configRequest(...queryKeyArgs) : configRequest;
 
@@ -149,7 +153,7 @@ export function createQueryFactory<TConfig>(
          */
         (request ?? false) !== false;
 
-      return useQuery<any, any, any, any>({
+      return useQuery({
         ...queryOptions,
         ...queryOptionsOverrides,
         enabled: isQueryEnabled,
@@ -362,7 +366,7 @@ if (import.meta.vitest) {
     });
 
     test('should be able to omit `queryOpts` and/or `queryKey` args if they are optional', async () => {
-      const requestSpy = vi.fn<[test?: string]>(() => 1);
+      const requestSpy = vi.fn((test?: string) => 1);
       const useOptionsSpy = vi.fn<[[test?: string]]>();
       const useTest = createQuery(keys.dynamicOptional, {
         request: requestSpy,
