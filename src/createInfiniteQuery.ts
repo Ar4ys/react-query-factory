@@ -29,6 +29,8 @@ type GetNextPageParamFunction<TQueryFnData = unknown, TPageParam = unknown> = (
  *
  * It is (probably) fixed in react-query v5-alpha
  */
+// TODO: Remove support for `onSuccess`, `onError` and `onSettled` as they are deprecated
+// and will be removed in react-query@5
 type UseInfiniteQueryOptions<
   TQueryFnData = unknown,
   TError = unknown,

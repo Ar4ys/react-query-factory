@@ -1,30 +1,76 @@
 import {
-  QueryKey,
   UseQueryOptions as TanstackUseQueryOptions,
   UseQueryResult,
   useQuery,
 } from '@tanstack/react-query';
 
-import type { DynamicKey, DynamicKeyMeta, Key, KeyMeta } from './createQueryKeys';
-import { QueryFunction } from './createReactQueryFactories';
+import type { GetKeyMeta, GetKeyValue, KeyConstraint } from './createQueryKeys';
+import type { QueryFunction } from './createReactQueryFactories';
+import { NoInfer, PickRequired, PickRequiredTuple } from './utils';
+
+// TODO: Should we replace `ctx` with `meta` from react-query?
+type QueryContext<T> = T extends undefined ? { ctx?: T } : { ctx: T };
+type QueryArgs<T extends any[]> = PickRequiredTuple<T> extends [] ? { args?: T } : { args: T };
+
+// TODO: Remove support for `onSuccess`, `onError` and `onSettled` as they are deprecated
+// and will be removed in react-query@5
+type QueryOptions<
+  TKey extends KeyConstraint,
+  TError = unknown,
+  TData = GetKeyMeta<TKey>['returnType'],
+> = Omit<
+  TanstackUseQueryOptions<
+    GetKeyMeta<TKey>['returnType'],
+    TError,
+    /**
+     * Only `select` can change `TData` type, but `TData` is also used in other fields (`onSuccess`,
+     * `onSettled`, etc.). As a result in the situation below `data` (above `?^`) will be `any`,
+     * because it is specified as `any` in `onSuccess`. In order to prevent this `select` is the
+     * only field that directly access `TData` (so type inference works), other fields that should
+     * not be able to change `TData` can only access `NoInfer<TData>` (so type inference won't
+     * work)
+     *
+     * ```ts
+     * const useTest = createQuery(key, {
+     *   request,
+     *   useOptions: () => ({
+     *     select: (data): number => data.num,
+     *     onSuccess: (data: any) => {},
+     *   }),
+     * });
+     *
+     * const { data } = useTest();
+     * //      ?^
+     * ```
+     */
+    NoInfer<TData>,
+    GetKeyValue<TKey>
+  >,
+  'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey' | 'select'
+> & {
+  /**
+   * This option can be used to transform or select a part of the data returned by the query
+   * function.
+   */
+  select?: (data: GetKeyMeta<TKey>['returnType']) => TData;
+};
 
 type UseQueryOptions<
-  TQueryFnData = unknown,
+  TKey extends KeyConstraint,
   TError = unknown,
-  TData = TQueryFnData,
-  TQueryKey extends QueryKey = QueryKey,
-> = Omit<
-  TanstackUseQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-  'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey'
->;
+  TData = GetKeyMeta<TKey>['returnType'],
+  TContext = undefined,
+  // TODO: Add support for select override
+> = Omit<QueryOptions<TKey, TError, TData>, 'select'> &
+  QueryContext<TContext> &
+  QueryArgs<GetKeyMeta<TKey>['fnArgs']>;
 
 type QueryConfig<
   TConfig,
-  TArgs extends any[],
-  TQueryFnData = unknown,
+  TKey extends KeyConstraint,
   TError = unknown,
-  TData = TQueryFnData,
-  TQueryKey extends QueryKey = QueryKey,
+  TData = GetKeyMeta<TKey>['returnType'],
+  TContext = undefined,
 > = {
   /**
    * TODO: Should we give user ability to return falsy value in order to disable query (set `enable:
@@ -44,48 +90,31 @@ type QueryConfig<
    * (disabled query) and reflect that in return type (`Promise<TData>` if request config is always
    * present and `Promise<TData> | undefined` if request config is possibly absent)
    */
-  request: ((...args: TArgs) => TConfig | undefined | null | false) | TConfig;
+  request: ((...args: GetKeyMeta<TKey>['fnArgs']) => TConfig | undefined | null | false) | TConfig;
   useOptions?:
-    | UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>
-    | ((...args: TArgs) => UseQueryOptions<TQueryFnData, TError, TData, TQueryKey>);
+    | QueryOptions<TKey, TError, TData>
+    | ((args: GetKeyMeta<TKey>['fnArgs'], context: TContext) => QueryOptions<TKey, TError, TData>);
 };
 
-type UseQueryHook<
-  TResponse,
-  TError = unknown,
-  TData = TResponse,
-  TQueryKey extends QueryKey = QueryKey,
-> = <TTData = TData>(
-  queryOpts?: UseQueryOptions<TResponse, TError, TTData, TQueryKey>,
+type UseQueryHookParams<TKey extends KeyConstraint, TError, TData, TContext> = keyof PickRequired<
+  UseQueryOptions<TKey, TError, TData, TContext>
+> extends never
+  ? [queryOpts?: UseQueryOptions<TKey, TError, TData, TContext>]
+  : [queryOpts: UseQueryOptions<TKey, TError, TData, TContext>];
+
+type UseQueryHook<TKey extends KeyConstraint, TError, TData, TContext> = <TTData = TData>(
+  ...args: UseQueryHookParams<TKey, TError, TTData, TContext>
 ) => UseQueryResult<TTData, TError>;
 
-type UseQueryHookWithArgs<
-  TResponse,
-  TArgs extends any[],
+export type CreateQuery<TConfig> = <
+  TKey extends KeyConstraint,
   TError = unknown,
-  TData = TResponse,
-  TQueryKey extends QueryKey = QueryKey,
-> = <TTData = TData>(
-  args: TArgs,
-  queryOpts?: UseQueryOptions<TResponse, TError, TTData, TQueryKey>,
-) => UseQueryResult<TTData, TError>;
-
-export type CreateQuery<TConfig> = {
-  <TKey extends QueryKey, TMeta extends KeyMeta<any>, TError, TData = TMeta['returnType']>(
-    queryKey: Key<TKey, TMeta>,
-    config: QueryConfig<TConfig, [], TMeta['returnType'], TError, TData, TKey>,
-  ): UseQueryHook<TMeta['returnType'], TError, TData, TKey>;
-
-  <
-    TKey extends QueryKey,
-    TMeta extends DynamicKeyMeta<any, any>,
-    TError,
-    TData = TMeta['returnType'],
-  >(
-    queryKey: DynamicKey<TKey, TMeta>,
-    config: QueryConfig<TConfig, TMeta['fnArgs'], TMeta['returnType'], TError, TData, TKey>,
-  ): UseQueryHookWithArgs<TMeta['returnType'], TMeta['fnArgs'], TError, TData, TKey>;
-};
+  TData = GetKeyMeta<TKey>['returnType'],
+  TContext = undefined,
+>(
+  queryKey: TKey,
+  config: QueryConfig<TConfig, TKey, TError, TData, TContext>,
+) => UseQueryHook<TKey, TError, TData, TContext>;
 
 type CreateQueryFactoryOptions<TConfig> = {
   queryFn: QueryFunction<TConfig>;
@@ -96,36 +125,17 @@ type CreateQueryFactoryOptions<TConfig> = {
 export function createQueryFactory<TConfig>(
   options: CreateQueryFactoryOptions<TConfig>,
 ): CreateQuery<TConfig> {
-  function createQuery(
-    queryKey: Key<QueryKey, KeyMeta<any>>,
-    config: QueryConfig<TConfig, unknown[]>,
-  ): UseQueryHook<unknown>;
-
-  function createQuery(
-    queryKey: DynamicKey<QueryKey, DynamicKeyMeta<any, any>>,
-    config: QueryConfig<TConfig, unknown[]>,
-  ): UseQueryHookWithArgs<unknown, unknown[]>;
-
-  function createQuery(
-    queryKey: Key<QueryKey, KeyMeta<any>> | DynamicKey<QueryKey, DynamicKeyMeta<any, any>>,
-    { request: configRequest, useOptions: configUseOptions }: QueryConfig<TConfig, unknown[]>,
-  ): UseQueryHook<unknown> | UseQueryHookWithArgs<unknown, unknown[]> {
+  return (
+    queryKey: KeyConstraint,
+    { request: configRequest, useOptions: configUseOptions }: QueryConfig<any, any, any, any, any>,
+  ): UseQueryHook<any, any, any, any> => {
     return (
-      ...args: [args: unknown[], queryOpts?: UseQueryOptions] | [queryOpts?: UseQueryOptions<any>]
+      { args: queryKeyArgs = [], ...queryOptionsOverrides }: UseQueryOptions<any> = {} as any,
     ) => {
       const useOptions =
         typeof configUseOptions === 'function' ? configUseOptions : () => configUseOptions;
       const queryKeyFn = typeof queryKey === 'function' ? queryKey : () => queryKey;
-      let queryKeyArgs: unknown[] = [];
-      let queryOptionsOverrides: UseQueryOptions | undefined;
-
-      if (Array.isArray(args[0])) {
-        [queryKeyArgs, queryOptionsOverrides] = args;
-      } else {
-        [queryOptionsOverrides] = args;
-      }
-
-      const queryOptions = useOptions?.(...queryKeyArgs);
+      const queryOptions = useOptions?.(queryKeyArgs, queryOptionsOverrides?.ctx);
       const request =
         configRequest instanceof Function ? configRequest(...queryKeyArgs) : configRequest;
 
@@ -139,15 +149,15 @@ export function createQueryFactory<TConfig>(
          */
         (request ?? false) !== false;
 
-      return useQuery<any>({
+      return useQuery<any, any, any, any>({
         ...queryOptions,
         ...queryOptionsOverrides,
         enabled: isQueryEnabled,
-        queryKey: queryKeyFn(...queryKeyArgs).queryKey,
-        queryFn(context) {
+        queryKey: queryKeyFn(queryKeyArgs).queryKey,
+        queryFn(requestConfig) {
           if (!request) return;
           const contextWithoutPageParam = {
-            ...context,
+            ...requestConfig,
             pageParam: undefined,
           };
           delete contextWithoutPageParam.pageParam;
@@ -167,14 +177,13 @@ export function createQueryFactory<TConfig>(
         },
       });
     };
-  }
-
-  return createQuery;
+  };
 }
 
 if (import.meta.vitest) {
   const { test, expect, vi, describe } = import.meta.vitest;
   const { renderHook, waitFor } = await import('@testing-library/react');
+  const { assertType } = await import('vitest');
   const { wrapper } = await import('./vitest');
   const { createQueryKeys } = await import('./createQueryKeys');
 
@@ -184,7 +193,10 @@ if (import.meta.vitest) {
   };
 
   const keys = createQueryKeys('test', (key) => ({
-    a: key<Config | string | number>(),
+    static: key<Config | string | number>(),
+    dynamic: key.dynamic<Config | string | number, [test: string]>(),
+    dynamicOptional: key.dynamic<Config | string | number, [test?: string]>(),
+    simple: key<number>(),
   }));
 
   const queryFnSpy = vi.fn((config: Config | string | number) => config);
@@ -193,7 +205,7 @@ if (import.meta.vitest) {
     queryFn: queryFnSpy,
   });
 
-  describe('callbacks', async () => {
+  describe('callbacks', () => {
     const onSuccessSpy = vi.fn();
     const onSuccessOverloadSpy = vi.fn();
     const onErrorSpy = vi.fn();
@@ -201,7 +213,7 @@ if (import.meta.vitest) {
     const onSettledSpy = vi.fn();
     const onSettledOverloadSpy = vi.fn();
 
-    const useTest = createQuery(keys.a, {
+    const useTest = createQuery(keys.static, {
       request: requestConfig,
       useOptions: () => ({
         onSuccess: onSuccessSpy,
@@ -259,7 +271,7 @@ if (import.meta.vitest) {
 
   describe('enabled', () => {
     test('useOptions.enabled is false', () => {
-      const useTest = createQuery(keys.a, {
+      const useTest = createQuery(keys.static, {
         request: requestConfig,
         useOptions: () => ({
           enabled: false,
@@ -271,7 +283,7 @@ if (import.meta.vitest) {
     });
 
     test('request is falsy', () => {
-      const useTest = createQuery(keys.a, {
+      const useTest = createQuery(keys.static, {
         request: () => null,
         useOptions: () => ({
           enabled: true,
@@ -283,7 +295,7 @@ if (import.meta.vitest) {
     });
 
     test('queryOpts.enabled is false', () => {
-      const useTest = createQuery(keys.a, {
+      const useTest = createQuery(keys.static, {
         request: requestConfig,
         useOptions: () => ({
           enabled: true,
@@ -295,7 +307,7 @@ if (import.meta.vitest) {
     });
 
     test('request as an empty string should not set "enabled: false"', () => {
-      const useTest = createQuery(keys.a, {
+      const useTest = createQuery(keys.static, {
         request: '',
       });
 
@@ -304,12 +316,254 @@ if (import.meta.vitest) {
     });
 
     test('request as a zero should not set "enabled: false"', () => {
-      const useTest = createQuery(keys.a, {
+      const useTest = createQuery(keys.static, {
         request: 0,
       });
 
       const { result } = renderHook(() => useTest(), { wrapper });
       expect(result.current.fetchStatus).not.toBe('idle');
     });
+  });
+
+  describe('dynamic queries', () => {
+    test('should be able to pass queryKey arguments', async () => {
+      const useOptionsSpy = vi.fn();
+      const useTest = createQuery(keys.dynamic, {
+        request: (testArg) => testArg,
+        useOptions: useOptionsSpy,
+      });
+
+      const { result } = renderHook(() => useTest({ args: ['test'] }), { wrapper });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(queryFnSpy.mock.lastCall?.[0]).toBe('test');
+      expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual(['test']);
+    });
+
+    test('should be able to omit `queryOpts` and/or `queryKey` args if query is "static"', async () => {
+      const requestSpy = vi.fn(() => 1);
+      const useOptionsSpy = vi.fn<[[]]>();
+      const useTest = createQuery(keys.static, {
+        request: requestSpy,
+        useOptions: useOptionsSpy,
+      });
+
+      {
+        const { result } = renderHook(() => useTest({}), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+      {
+        const { result } = renderHook(() => useTest(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+    });
+
+    test('should be able to omit `queryOpts` and/or `queryKey` args if they are optional', async () => {
+      const requestSpy = vi.fn<[test?: string]>(() => 1);
+      const useOptionsSpy = vi.fn<[[test?: string]]>();
+      const useTest = createQuery(keys.dynamicOptional, {
+        request: requestSpy,
+        useOptions: useOptionsSpy,
+      });
+
+      {
+        const { result } = renderHook(() => useTest({ args: [] }), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+      {
+        const { result } = renderHook(() => useTest({}), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+      {
+        const { result } = renderHook(() => useTest(), { wrapper });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
+      }
+    });
+
+    test('should NOT be able to omit `queryOpts` and/or `queryKey` args if they are required', () => {
+      const useTest = createQuery(keys.dynamic, {
+        request: requestConfig,
+      });
+
+      // @ts-expect-error
+      renderHook(() => useTest(), { wrapper });
+      // @ts-expect-error
+      renderHook(() => useTest({}), { wrapper });
+      // @ts-expect-error
+      renderHook(() => useTest({ args: [] }), { wrapper });
+    });
+  });
+
+  describe('context', () => {
+    test('should be able to pass context', async () => {
+      const useOptionsSpy = vi.fn<[queryArgs: [test: string], ctx: string]>();
+      const useTest = createQuery(keys.dynamic, {
+        request: requestConfig,
+        useOptions: useOptionsSpy,
+      });
+
+      const { result } = renderHook(() => useTest({ args: ['test'], ctx: 'ctx-test' }), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(useOptionsSpy.mock.lastCall).toStrictEqual([['test'], 'ctx-test']);
+    });
+
+    test('should be able to omit `ctx` if it is optional', async () => {
+      const useOptionsSpy = vi.fn<[queryArgs: [test: string], ctx?: string]>();
+      const useTest = createQuery(keys.dynamic, {
+        request: requestConfig,
+        useOptions: useOptionsSpy,
+      });
+
+      const { result } = renderHook(() => useTest({ args: ['test'] }), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(useOptionsSpy.mock.lastCall).toStrictEqual([['test'], undefined]);
+    });
+
+    test('should NOT be able to omit query argument or `ctx` if `ctx` is required', () => {
+      const useOptionsSpy = vi.fn<[queryArgs: [], ctx: string]>();
+      const useTest = createQuery(keys.static, {
+        request: requestConfig,
+        useOptions: useOptionsSpy,
+      });
+
+      // @ts-expect-error
+      renderHook(() => useTest({}), { wrapper });
+      // @ts-expect-error
+      renderHook(() => useTest(), { wrapper });
+    });
+  });
+
+  // describe('select', () => {
+  //   test('`select` override should not affect members inside query declaration', async () => {
+  //     const onSuccessSpy = vi.fn<[data: number]>();
+  //     const onSuccessOverrideSpy = vi.fn<[data: string]>();
+  //     const useTest = createQuery(keys.static, {
+  //       request: requestConfig,
+  //       useOptions: {
+  //         select: () => 1,
+  //         onSuccess: onSuccessSpy,
+  //       },
+  //     });
+
+  //     const { result } = renderHook(
+  //       () =>
+  //         useTest({
+  //           select: () => '2',
+  //           onSuccess: onSuccessOverrideSpy,
+  //         }),
+  //       {
+  //         wrapper,
+  //       },
+  //     );
+  //     await waitFor(() => expect(result.current.data).toBe('2'));
+  //     expect(onSuccessSpy.mock.lastCall).toStrictEqual([1]);
+  //     expect(onSuccessOverrideSpy.mock.lastCall).toStrictEqual(['2']);
+  //   });
+  // });
+
+  describe('typing', () => {
+    test('`onSuccess`, `onSettled` and others should NOT affect type of `data`', () => {
+      const useTest = createQuery(keys.simple, {
+        request: requestConfig,
+        useOptions: {
+          onError(error: unknown) {},
+          // @ts-expect-error
+          onSettled(data?: string) {},
+          // @ts-expect-error
+          onSuccess(data: string) {},
+        },
+      });
+
+      const { result } = renderHook(() => useTest(), { wrapper });
+
+      assertType<number | undefined>(result.current.data);
+    });
+
+    test('`onSuccess`, `onSettled` and others overrides should NOT affect type of `data`', () => {
+      const useTest = createQuery(keys.simple, {
+        request: requestConfig,
+        useOptions: {
+          onError(error: unknown) {},
+          // @ts-expect-error
+          onSettled(data?: string) {},
+          // @ts-expect-error
+          onSuccess(data: string) {},
+        },
+      });
+
+      const { result } = renderHook(
+        () =>
+          useTest({
+            onError(error: unknown) {},
+            // @ts-expect-error
+            onSettled(data?: string) {},
+            // @ts-expect-error
+            onSuccess(data: string) {},
+          }),
+        { wrapper },
+      );
+
+      assertType<number | undefined>(result.current.data);
+    });
+
+    test('`select` should affect type of `data`', () => {
+      const useTest = createQuery(keys.simple, {
+        request: requestConfig,
+        useOptions: {
+          select: () => true as const,
+          onError(error: unknown) {},
+          // @ts-expect-error
+          onSettled(data?: string) {},
+          // @ts-expect-error
+          onSuccess(data: string) {},
+        },
+      });
+
+      const { result } = renderHook(() => useTest(), { wrapper });
+
+      assertType<true | undefined>(result.current.data);
+    });
+
+    // test('`select` override should affect type of `data`', () => {
+    //   const useTest = createQuery(keys.simple, {
+    //     request: requestConfig,
+    //     useOptions: {
+    //       select: (data) => true as const,
+    //       onError(error: unknown) {},
+    //       // @ts-expect-error
+    //       onSettled(data?: string) {},
+    //       // @ts-expect-error
+    //       onSuccess(data: string) {},
+    //     },
+    //   });
+
+    //   const { result } = renderHook(
+    //     () =>
+    //       useTest({
+    //         select: () => false as const,
+    //         onError(error: unknown) {},
+    //         // @ts-expect-error
+    //         onSettled(data?: string) {},
+    //         // @ts-expect-error
+    //         onSuccess(data: string) {},
+    //       }),
+    //     { wrapper },
+    //   );
+
+    //   assertType<false | undefined>(result.current.data);
+    // });
   });
 }

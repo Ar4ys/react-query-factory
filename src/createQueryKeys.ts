@@ -6,6 +6,7 @@ const KeyBuilderSymbol = Symbol('KeyBuilderSymbol');
 export type KeyMeta<TReturn> = {
   dynamic: false;
   returnType: TReturn;
+  fnArgs: [];
 };
 
 export type DynamicKeyMeta<TReturn, TArgs extends any[]> = {
@@ -31,6 +32,22 @@ export type DynamicKey<
   (...args: TMeta['fnArgs']): Key<[...TKey, TMeta['fnArgs']], TMeta> & TRest;
   _def: KeyDef<TKey, KeyMeta<TMeta['returnType']>>;
 };
+
+export type KeyConstraint =
+  | Key<any, KeyMeta<any> | DynamicKeyMeta<any, any>>
+  | DynamicKey<any, DynamicKeyMeta<any, any>>;
+
+export type GetKeyValue<T extends KeyConstraint> = T extends Key<infer K, any>
+  ? K
+  : T extends DynamicKey<infer K, any>
+  ? K
+  : never;
+
+export type GetKeyMeta<T extends KeyConstraint> = T extends Key<any, infer K>
+  ? K
+  : T extends DynamicKey<any, infer K>
+  ? K
+  : never;
 
 type KeyBuilderCurry<TReturn> = {
   [KeyBuilderSymbol]: { dynamic: false };
