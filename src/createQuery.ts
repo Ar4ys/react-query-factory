@@ -191,14 +191,16 @@ if (import.meta.vitest) {
     url: 'url',
   };
 
+  type QueryReturn = Config | string | number;
+
   const keys = createQueryKeys('test', (key) => ({
-    static: key<Config | string | number>(),
-    dynamic: key.dynamic<Config | string | number, [test: string]>(),
-    dynamicOptional: key.dynamic<Config | string | number, [test?: string]>(),
+    static: key<QueryReturn>(),
+    dynamic: key.dynamic<QueryReturn, [test: string]>(),
+    dynamicOptional: key.dynamic<QueryReturn, [test?: string]>(),
     simple: key<number>(),
   }));
 
-  const queryFnSpy = vi.fn((config: Config | string | number) => config);
+  const queryFnSpy = vi.fn((config: QueryReturn) => config);
 
   const createQuery = createQueryFactory({
     queryFn: queryFnSpy,
@@ -209,13 +211,14 @@ if (import.meta.vitest) {
       request: requestConfig,
     });
 
-    test('onSuccess and onSettled', async () => {
+    test('correct data', async () => {
       const { result } = renderHook(() => useTest(), { wrapper });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      assertType<QueryReturn | undefined>(result.current.data);
       expect(result.current.data).toBe(requestConfig);
     });
 
-    test('onError and onSettled', async () => {
+    test('correct error', async () => {
       const error = new Error('test');
       queryFnSpy.mockImplementationOnce(() => {
         throw error;
@@ -434,7 +437,7 @@ if (import.meta.vitest) {
   // });
 
   describe('typing', () => {
-    test('`onSuccess`, `onSettled` and others should NOT affect type of `data`', () => {
+    test('`refetchInterval` should NOT affect type of `data`', () => {
       const useTest = createQuery(keys.simple, {
         request: requestConfig,
         useOptions: {
@@ -448,7 +451,7 @@ if (import.meta.vitest) {
       assertType<number | undefined>(result.current.data);
     });
 
-    test('`onSuccess`, `onSettled` and others overrides should NOT affect type of `data`', () => {
+    test('`refetchInterval` override should NOT affect type of `data`', () => {
       const useTest = createQuery(keys.simple, {
         request: requestConfig,
         useOptions: {

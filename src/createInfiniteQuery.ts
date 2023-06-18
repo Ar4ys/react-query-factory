@@ -207,14 +207,16 @@ if (import.meta.vitest) {
     pageParam,
   });
 
+  type QueryReturn = Config | string | number;
+
   const keys = createQueryKeys('test', (key) => ({
-    static: key.infinite<Config | string | number>(),
-    dynamic: key.infinite.dynamic<Config | string | number, [test: string]>(),
-    dynamicOptional: key.infinite.dynamic<Config | string | number, [test?: string]>(),
+    static: key.infinite<QueryReturn>(),
+    dynamic: key.infinite.dynamic<QueryReturn, [test: string]>(),
+    dynamicOptional: key.infinite.dynamic<QueryReturn, [test?: string]>(),
     simple: key.infinite<number>(),
   }));
 
-  const queryFnSpy = vi.fn((config: Config | string | number) => config);
+  const queryFnSpy = vi.fn((config: QueryReturn) => config);
 
   const createInfiniteQuery = createInfiniteQueryFactory({
     queryFn: queryFnSpy,
@@ -225,16 +227,17 @@ if (import.meta.vitest) {
       request: requestConfig,
     });
 
-    test('onSuccess and onSettled', async () => {
+    test('correct data', async () => {
       const { result } = renderHook(() => useTest(), { wrapper });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      assertType<InfiniteData<QueryReturn> | undefined>(result.current.data);
       expect(result.current.data).toStrictEqual({
         pageParams: [undefined],
         pages: [requestConfig([], undefined)],
       });
     });
 
-    test('onError and onSettled', async () => {
+    test('correct error', async () => {
       const error = new Error('test');
       queryFnSpy.mockImplementationOnce(() => {
         throw error;
@@ -406,7 +409,7 @@ if (import.meta.vitest) {
   });
 
   describe('typing', () => {
-    test('`onSuccess`, `onSettled` and others should NOT affect type of `data`', () => {
+    test('`refetchInterval` should NOT affect type of `data`', () => {
       const useTest = createInfiniteQuery(keys.simple, {
         request: requestConfig,
         useOptions: {
@@ -420,7 +423,7 @@ if (import.meta.vitest) {
       assertType<InfiniteData<number> | undefined>(result.current.data);
     });
 
-    test('`onSuccess`, `onSettled` and others overrides should NOT affect type of `data`', () => {
+    test('`refetchInterval` override should NOT affect type of `data`', () => {
       const useTest = createInfiniteQuery(keys.simple, {
         request: requestConfig,
         useOptions: {
