@@ -77,7 +77,7 @@ export function createReactQueryFactories<
   }));
 
   const useTestQuery = createQuery(test.lol1, {
-    request: (test) => ({
+    request: ([test]) => ({
       fancy: 'lol',
     }),
     useOptions: ([test]) => ({
@@ -97,12 +97,10 @@ export function createReactQueryFactories<
   const useInfiniteQuery = createInfiniteQuery(test.all1, {
     getNextPageParam: (data) => data.a,
     //                 ^?
-    request:
-      (test) =>
-      (pageParam = 0) => ({
-        // ^?
-        fancy: pageParam.toString(),
-      }),
+    request: ([test], pageParam = 0) => ({
+      //              ^?
+      fancy: pageParam.toString(),
+    }),
 
     useOptions: ([test = true]) => ({
       select: (data) => data.pages.flatMap((x) => x.items),

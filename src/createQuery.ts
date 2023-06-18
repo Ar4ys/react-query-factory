@@ -92,7 +92,7 @@ type QueryConfig<
    * (disabled query) and reflect that in return type (`Promise<TData>` if request config is always
    * present and `Promise<TData> | undefined` if request config is possibly absent)
    */
-  request: ((...args: GetKeyMeta<TKey>['fnArgs']) => TConfig | undefined | null | false) | TConfig;
+  request: ((args: GetKeyMeta<TKey>['fnArgs']) => TConfig | undefined | null | false) | TConfig;
 
   useOptions?:
     | QueryOptions<TKey, TError, TData>
@@ -147,7 +147,7 @@ export function createQueryFactory<TConfig>(
       const queryKeyFn = typeof queryKey === 'function' ? queryKey : () => queryKey;
       const queryOptions = useOptions?.(queryKeyArgs, queryContext);
       const request =
-        configRequest instanceof Function ? configRequest(...queryKeyArgs) : configRequest;
+        configRequest instanceof Function ? configRequest(queryKeyArgs) ?? false : configRequest;
 
       const isQueryEnabled =
         (queryOptions?.enabled ?? true) &&
@@ -157,7 +157,7 @@ export function createQueryFactory<TConfig>(
          * `TConfig`, in which case empty string and zero will be misinterpreted as falsy value and
          * will disable query (which is undesirable).
          */
-        (request ?? false) !== false;
+        request !== false;
 
       return useQuery({
         ...queryOptions,
@@ -165,7 +165,8 @@ export function createQueryFactory<TConfig>(
         enabled: isQueryEnabled,
         queryKey: queryKeyFn(queryKeyArgs).queryKey,
         queryFn(requestConfig) {
-          if (!request) return;
+          /** We cannot use `!request` here for the same reason as above */
+          if (request === false) return;
           const contextWithoutPageParam = {
             ...requestConfig,
             pageParam: undefined,
@@ -287,7 +288,7 @@ if (import.meta.vitest) {
     test('should be able to pass queryKey arguments', async () => {
       const useOptionsSpy = vi.fn();
       const useTest = createQuery(keys.dynamic, {
-        request: (testArg) => testArg,
+        request: ([testArg]) => testArg,
         useOptions: useOptionsSpy,
       });
 
@@ -308,19 +309,19 @@ if (import.meta.vitest) {
       {
         const { result } = renderHook(() => useTest({}), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[]]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
       {
         const { result } = renderHook(() => useTest(), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[]]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
     });
 
     test('should be able to omit `queryOpts` and/or `queryKey` args if they are optional', async () => {
-      const requestSpy = vi.fn((test?: string) => 1);
+      const requestSpy = vi.fn(([test]: [string?]) => 1);
       const useOptionsSpy = vi.fn<[[test?: string]]>();
       const useTest = createQuery(keys.dynamicOptional, {
         request: requestSpy,
@@ -330,19 +331,19 @@ if (import.meta.vitest) {
       {
         const { result } = renderHook(() => useTest({ args: [] }), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[]]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
       {
         const { result } = renderHook(() => useTest({}), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[]]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
       {
         const { result } = renderHook(() => useTest(), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[]]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
     });

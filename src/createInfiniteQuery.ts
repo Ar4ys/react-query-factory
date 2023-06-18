@@ -74,16 +74,11 @@ type InfiniteQueryConfig<
    * be able to use it in `queryFn` (maybe we should create `infiniteQueryFn`?) in
    * `createReactQueryFactories`. In that case there is no need to force `request` to be function
    * here.
-   *
-   * TODO: Should we replace this function in function pattern with `(args, pageParam) => TConfig`?
-   *
-   * That way there will be no need for nested functions (which is easier to use) and `request` will
-   * be similar to `useOptions` (`args` is an array that needs to be destructed). If this is
-   * `approved` - the same needs to be done in `QueryConfig`
    */
   request: (
-    ...args: GetKeyMeta<TKey>['fnArgs']
-  ) => ((pageParam: TPageParam | undefined) => TConfig) | undefined | null | false;
+    args: GetKeyMeta<TKey>['fnArgs'],
+    pageParam: TPageParam | undefined,
+  ) => TConfig | undefined | null | false;
 
   useOptions?:
     | InfiniteQueryOptions<TKey, TError, TData>
@@ -164,7 +159,7 @@ export const createInfiniteQueryFactory = <TConfig>(
         typeof configUseOptions === 'function' ? configUseOptions : () => configUseOptions;
       const queryKeyFn = typeof queryKey === 'function' ? queryKey : () => queryKey;
       const queryOptions = useOptions?.(queryKeyArgs, queryContext);
-      const request = configRequest(...queryKeyArgs);
+      const request = configRequest(queryKeyArgs, undefined) ?? false;
 
       const isQueryEnabled =
         (queryOptions?.enabled ?? true) &&
@@ -174,7 +169,7 @@ export const createInfiniteQueryFactory = <TConfig>(
          * `TConfig`, in which case empty string and zero will be misinterpreted as falsy value and
          * will disable query (which is undesirable).
          */
-        (request ?? false) !== false;
+        request !== false;
 
       return useInfiniteQuery({
         ...queryOptions,
@@ -182,13 +177,15 @@ export const createInfiniteQueryFactory = <TConfig>(
         enabled: isQueryEnabled,
         queryKey: queryKeyFn(...queryKeyArgs).queryKey,
         queryFn(requestConfig) {
-          if (!request) return;
+          const request = configRequest(queryKeyArgs, requestConfig.pageParam) ?? false;
+          /** We cannot use `!request` here for the same reason as above */
+          if (request === false) return;
           const contextWithoutPageParam = {
             ...requestConfig,
             pageParam: undefined,
           };
           delete contextWithoutPageParam.pageParam;
-          return options.queryFn(request(requestConfig.pageParam), contextWithoutPageParam);
+          return options.queryFn(request, contextWithoutPageParam);
         },
         getNextPageParam,
         getPreviousPageParam,
@@ -205,7 +202,7 @@ if (import.meta.vitest) {
   const { createQueryKeys } = await import('./createQueryKeys');
 
   type Config = ReturnType<typeof requestConfig>;
-  const requestConfig = (pageParam: unknown) => ({
+  const requestConfig = (_: unknown, pageParam: unknown) => ({
     url: 'url',
     pageParam,
   });
@@ -225,7 +222,7 @@ if (import.meta.vitest) {
 
   describe('basic functionality', async () => {
     const useTest = createInfiniteQuery(keys.static, {
-      request: () => requestConfig,
+      request: requestConfig,
     });
 
     test('onSuccess and onSettled', async () => {
@@ -233,7 +230,7 @@ if (import.meta.vitest) {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toStrictEqual({
         pageParams: [undefined],
-        pages: [requestConfig(undefined)],
+        pages: [requestConfig([], undefined)],
       });
     });
 
@@ -252,7 +249,7 @@ if (import.meta.vitest) {
   describe('enabled', () => {
     test('useOptions.enabled is false', () => {
       const useTest = createInfiniteQuery(keys.static, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: () => ({
           enabled: false,
         }),
@@ -276,7 +273,7 @@ if (import.meta.vitest) {
 
     test('queryOpts.enabled is false', () => {
       const useTest = createInfiniteQuery(keys.static, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: () => ({
           enabled: true,
         }),
@@ -291,7 +288,7 @@ if (import.meta.vitest) {
     test('should be able to pass queryKey arguments', async () => {
       const useOptionsSpy = vi.fn();
       const useTest = createInfiniteQuery(keys.dynamic, {
-        request: (testArg) => () => testArg,
+        request: ([testArg]) => testArg,
         useOptions: useOptionsSpy,
       });
 
@@ -302,7 +299,7 @@ if (import.meta.vitest) {
     });
 
     test('should be able to omit `queryOpts` and/or `queryKey` args if query is "static"', async () => {
-      const requestSpy = vi.fn(() => requestConfig);
+      const requestSpy = vi.fn(requestConfig);
       const useOptionsSpy = vi.fn<[[]]>();
       const useTest = createInfiniteQuery(keys.static, {
         request: requestSpy,
@@ -312,19 +309,19 @@ if (import.meta.vitest) {
       {
         const { result } = renderHook(() => useTest({}), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[], undefined]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
       {
         const { result } = renderHook(() => useTest(), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[], undefined]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
     });
 
     test('should be able to omit `queryOpts` and/or `queryKey` args if they are optional', async () => {
-      const requestSpy = vi.fn((test?: string) => () => 1);
+      const requestSpy = vi.fn((args: [string?], pageParam?: unknown) => 1);
       const useOptionsSpy = vi.fn<[[test?: string]]>();
       const useTest = createInfiniteQuery(keys.dynamicOptional, {
         request: requestSpy,
@@ -334,26 +331,26 @@ if (import.meta.vitest) {
       {
         const { result } = renderHook(() => useTest({ args: [] }), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[], undefined]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
       {
         const { result } = renderHook(() => useTest({}), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[], undefined]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
       {
         const { result } = renderHook(() => useTest(), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
-        expect(requestSpy.mock.lastCall).toStrictEqual([]);
+        expect(requestSpy.mock.lastCall).toStrictEqual([[], undefined]);
         expect(useOptionsSpy.mock.lastCall?.[0]).toStrictEqual([]);
       }
     });
 
     test('should NOT be able to omit `queryOpts` and/or `queryKey` args if they are required', () => {
       const useTest = createInfiniteQuery(keys.dynamic, {
-        request: () => requestConfig,
+        request: requestConfig,
       });
 
       // @ts-expect-error
@@ -369,7 +366,7 @@ if (import.meta.vitest) {
     test('should be able to pass context', async () => {
       const useOptionsSpy = vi.fn<[queryArgs: [test: string], ctx: string]>();
       const useTest = createInfiniteQuery(keys.dynamic, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: useOptionsSpy,
       });
 
@@ -383,7 +380,7 @@ if (import.meta.vitest) {
     test('should be able to omit `ctx` if it is optional', async () => {
       const useOptionsSpy = vi.fn<[queryArgs: [test: string], ctx?: string]>();
       const useTest = createInfiniteQuery(keys.dynamic, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: useOptionsSpy,
       });
 
@@ -397,7 +394,7 @@ if (import.meta.vitest) {
     test('should NOT be able to omit query argument or `ctx` if `ctx` is required', () => {
       const useOptionsSpy = vi.fn<[queryArgs: [], ctx: string]>();
       const useTest = createInfiniteQuery(keys.static, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: useOptionsSpy,
       });
 
@@ -411,7 +408,7 @@ if (import.meta.vitest) {
   describe('typing', () => {
     test('`onSuccess`, `onSettled` and others should NOT affect type of `data`', () => {
       const useTest = createInfiniteQuery(keys.simple, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: {
           // @ts-expect-error
           refetchInterval: (data?: string) => false,
@@ -425,7 +422,7 @@ if (import.meta.vitest) {
 
     test('`onSuccess`, `onSettled` and others overrides should NOT affect type of `data`', () => {
       const useTest = createInfiniteQuery(keys.simple, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: {
           // @ts-expect-error
           refetchInterval: (data?: string) => false,
@@ -446,7 +443,7 @@ if (import.meta.vitest) {
 
     test('`select` should affect type of `data`', () => {
       const useTest = createInfiniteQuery(keys.simple, {
-        request: () => requestConfig,
+        request: requestConfig,
         useOptions: {
           select: () => true as const,
           // @ts-expect-error
@@ -461,7 +458,7 @@ if (import.meta.vitest) {
 
     // test('`select` override should affect type of `data`', () => {
     //   const useTest = createInfiniteQuery(keys.simple, {
-    //     request: () => requestConfig,
+    //     request: requestConfig,
     //     useOptions: {
     //       select: () => true as const,
     //       // @ts-expect-error
