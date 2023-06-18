@@ -8,7 +8,7 @@ import type { MutationFunction } from './createReactQueryFactories';
 
 type UseMutationOptions<TData = unknown, TError = unknown, TVariables = unknown> = Omit<
   TanstackUseMutationOptions<TData, TError, TVariables>,
-  'mutationFn' | 'mutationKey'
+  'mutationFn'
 >;
 
 type MutationConfig<TConfig, TData = unknown, TError = unknown, TVariables = unknown> = {
