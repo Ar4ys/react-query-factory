@@ -32,7 +32,15 @@ type InfiniteQueryOptions<
     NoInfer<TData>,
     GetKeyValue<TKey>
   >,
-  'getNextPageParam' | 'getPreviousPageParam' | 'queryFn' | 'queryKey' | 'select'
+  | 'getNextPageParam'
+  | 'getPreviousPageParam'
+  | 'queryFn'
+  | 'queryKey'
+  | 'select'
+  // Deprecated
+  | 'onSuccess'
+  | 'onError'
+  | 'onSettled'
 > & {
   /**
    * This option can be used to transform or select a part of the data returned by the query
@@ -184,18 +192,6 @@ export const createInfiniteQueryFactory = <TConfig>(
         },
         getNextPageParam,
         getPreviousPageParam,
-        onError(...args) {
-          queryOptions?.onError?.(...args);
-          queryOptionsOverrides?.onError?.(...args);
-        },
-        onSuccess(...args) {
-          queryOptions?.onSuccess?.(...args);
-          queryOptionsOverrides?.onSuccess?.(...args);
-        },
-        onSettled(...args) {
-          queryOptions?.onSettled?.(...args);
-          queryOptionsOverrides?.onSettled?.(...args);
-        },
       });
     };
   };
@@ -227,70 +223,29 @@ if (import.meta.vitest) {
     queryFn: queryFnSpy,
   });
 
-  describe('callbacks', async () => {
-    const onSuccessSpy = vi.fn();
-    const onSuccessOverloadSpy = vi.fn();
-    const onErrorSpy = vi.fn();
-    const onErrorOverloadSpy = vi.fn();
-    const onSettledSpy = vi.fn();
-    const onSettledOverloadSpy = vi.fn();
-
+  describe('basic functionality', async () => {
     const useTest = createInfiniteQuery(keys.static, {
       request: () => requestConfig,
-      useOptions: () => ({
-        onSuccess: onSuccessSpy,
-        onError: onErrorSpy,
-        onSettled: onSettledSpy,
-      }),
     });
 
     test('onSuccess and onSettled', async () => {
-      const { result } = renderHook(
-        () =>
-          useTest({
-            onSuccess: onSuccessOverloadSpy,
-            onError: onErrorOverloadSpy,
-            onSettled: onSettledOverloadSpy,
-          }),
-        { wrapper },
-      );
-
+      const { result } = renderHook(() => useTest(), { wrapper });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toStrictEqual({
         pageParams: [undefined],
         pages: [requestConfig(undefined)],
       });
-      expect(onSuccessSpy).toBeCalled();
-      expect(onSuccessOverloadSpy).toBeCalled();
-      expect(onErrorSpy).not.toBeCalled();
-      expect(onErrorOverloadSpy).not.toBeCalled();
-      expect(onSettledSpy).toBeCalled();
-      expect(onSettledOverloadSpy).toBeCalled();
     });
 
     test('onError and onSettled', async () => {
+      const error = new Error('test');
       queryFnSpy.mockImplementationOnce(() => {
-        throw 'error';
+        throw error;
       });
 
-      const { result } = renderHook(
-        () =>
-          useTest({
-            onSuccess: onSuccessOverloadSpy,
-            onError: onErrorOverloadSpy,
-            onSettled: onSettledOverloadSpy,
-          }),
-        { wrapper },
-      );
-
+      const { result } = renderHook(() => useTest(), { wrapper });
       await waitFor(() => expect(result.current.isError).toBe(true));
-      expect(result.current.error).toBe('error');
-      expect(onSuccessSpy).not.toBeCalled();
-      expect(onSuccessOverloadSpy).not.toBeCalled();
-      expect(onErrorSpy).toBeCalled();
-      expect(onErrorOverloadSpy).toBeCalled();
-      expect(onSettledSpy).toBeCalled();
-      expect(onSettledOverloadSpy).toBeCalled();
+      expect(result.current.error).toBe(error);
     });
   });
 
@@ -458,11 +413,8 @@ if (import.meta.vitest) {
       const useTest = createInfiniteQuery(keys.simple, {
         request: () => requestConfig,
         useOptions: {
-          onError(error: unknown) {},
           // @ts-expect-error
-          onSettled(data?: string) {},
-          // @ts-expect-error
-          onSuccess(data: string) {},
+          refetchInterval: (data?: string) => false,
         },
       });
 
@@ -475,22 +427,16 @@ if (import.meta.vitest) {
       const useTest = createInfiniteQuery(keys.simple, {
         request: () => requestConfig,
         useOptions: {
-          onError(error: unknown) {},
           // @ts-expect-error
-          onSettled(data?: string) {},
-          // @ts-expect-error
-          onSuccess(data: string) {},
+          refetchInterval: (data?: string) => false,
         },
       });
 
       const { result } = renderHook(
         () =>
           useTest({
-            onError(error: unknown) {},
             // @ts-expect-error
-            onSettled(data?: string) {},
-            // @ts-expect-error
-            onSuccess(data: string) {},
+            refetchInterval: (data?: string) => false,
           }),
         { wrapper },
       );
@@ -503,11 +449,8 @@ if (import.meta.vitest) {
         request: () => requestConfig,
         useOptions: {
           select: () => true as const,
-          onError(error: unknown) {},
           // @ts-expect-error
-          onSettled(data?: string) {},
-          // @ts-expect-error
-          onSuccess(data: string) {},
+          refetchInterval: (data?: string) => false,
         },
       });
 
@@ -520,12 +463,9 @@ if (import.meta.vitest) {
     //   const useTest = createInfiniteQuery(keys.simple, {
     //     request: () => requestConfig,
     //     useOptions: {
-    //       select: (data) => true as const,
-    //       onError(error: unknown) {},
+    //       select: () => true as const,
     //       // @ts-expect-error
-    //       onSettled(data?: string) {},
-    //       // @ts-expect-error
-    //       onSuccess(data: string) {},
+    //       refetchInterval: (data?: string) => false,
     //     },
     //   });
 
@@ -533,11 +473,8 @@ if (import.meta.vitest) {
     //     () =>
     //       useTest({
     //         select: () => false as const,
-    //         onError(error: unknown) {},
     //         // @ts-expect-error
-    //         onSettled(data?: string) {},
-    //         // @ts-expect-error
-    //         onSuccess(data: string) {},
+    //         refetchInterval: (data?: string) => false,
     //       }),
     //     { wrapper },
     //   );

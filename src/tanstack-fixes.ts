@@ -15,8 +15,6 @@ import type {
  *
  * It is (probably) fixed in react-query v5-alpha
  */
-// TODO: Remove support for `onSuccess`, `onError` and `onSettled` as they are deprecated
-// and will be removed in react-query@5
 export type UseInfiniteQueryOptions<
   TQueryFnData = unknown,
   TError = unknown,

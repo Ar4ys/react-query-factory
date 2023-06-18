@@ -82,7 +82,7 @@ export function createReactQueryFactories<
     }),
     useOptions: ([test]) => ({
       // select: (data) => data.test,
-      onSuccess(data: any) {},
+      refetchInterval: (data: any) => false,
     }),
   });
 
