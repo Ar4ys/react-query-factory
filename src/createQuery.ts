@@ -4,17 +4,17 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 
-import type { GetKeyMeta, GetKeyValue, KeyConstraint } from './createQueryKeys';
+import type { AnyNonDefKey, GetKeyMeta, GetKeyValue } from './createQueryKeys';
 import type { QueryFunction } from './createReactQueryFactories';
 import { NoInfer, PickRequired, QueryArgs, QueryContext } from './utils';
 
 type QueryOptions<
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
 > = Omit<
   TanstackUseQueryOptions<
-    GetKeyMeta<TKey>['returnType'],
+    GetKeyMeta<TKey>['TData'],
     TError,
     /**
      * Only `select` can change `TData` type, but `TData` is also used in other fields (`onSuccess`,
@@ -54,24 +54,24 @@ type QueryOptions<
    * This option can be used to transform or select a part of the data returned by the query
    * function.
    */
-  select?: (data: GetKeyMeta<TKey>['returnType']) => TData;
+  select?: (data: GetKeyMeta<TKey>['TData']) => TData;
 };
 
 type UseQueryOptions<
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
   TContext = undefined,
   // TODO: Add support for select override
 > = Omit<QueryOptions<TKey, TError, TData>, 'select'> &
   QueryContext<TContext> &
-  QueryArgs<GetKeyMeta<TKey>['fnArgs']>;
+  QueryArgs<GetKeyMeta<TKey>['TArgs']>;
 
 type QueryConfig<
   TConfig,
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
   TContext = undefined,
 > = {
   /**
@@ -92,27 +92,27 @@ type QueryConfig<
    * (disabled query) and reflect that in return type (`Promise<TData>` if request config is always
    * present and `Promise<TData> | undefined` if request config is possibly absent)
    */
-  request: ((args: GetKeyMeta<TKey>['fnArgs']) => TConfig | undefined | null | false) | TConfig;
+  request: ((args: GetKeyMeta<TKey>['TArgs']) => TConfig | undefined | null | false) | TConfig;
 
   useOptions?:
     | QueryOptions<TKey, TError, TData>
-    | ((args: GetKeyMeta<TKey>['fnArgs'], context: TContext) => QueryOptions<TKey, TError, TData>);
+    | ((args: GetKeyMeta<TKey>['TArgs'], context: TContext) => QueryOptions<TKey, TError, TData>);
 };
 
-type UseQueryHookParams<TKey extends KeyConstraint, TError, TData, TContext> = keyof PickRequired<
+type UseQueryHookParams<TKey extends AnyNonDefKey, TError, TData, TContext> = keyof PickRequired<
   UseQueryOptions<TKey, TError, TData, TContext>
 > extends never
   ? [queryOpts?: UseQueryOptions<TKey, TError, TData, TContext>]
   : [queryOpts: UseQueryOptions<TKey, TError, TData, TContext>];
 
-type UseQueryHook<TKey extends KeyConstraint, TError, TData, TContext> = <TTData = TData>(
+type UseQueryHook<TKey extends AnyNonDefKey, TError, TData, TContext> = <TTData = TData>(
   ...args: UseQueryHookParams<TKey, TError, TTData, TContext>
 ) => UseQueryResult<TTData, TError>;
 
 export type CreateQuery<TConfig> = <
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
   TContext = undefined,
 >(
   queryKey: TKey,
@@ -129,7 +129,7 @@ export function createQueryFactory<TConfig>(
   options: CreateQueryFactoryOptions<TConfig>,
 ): CreateQuery<TConfig> {
   return (
-    queryKey: KeyConstraint,
+    queryKey: AnyNonDefKey,
     {
       request: configRequest,
       useOptions: configUseOptions,

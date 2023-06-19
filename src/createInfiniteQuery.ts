@@ -1,15 +1,12 @@
 import { InfiniteData, useInfiniteQuery } from '@tanstack/react-query';
 
-import type { GetKeyMeta, GetKeyValue, KeyConstraint } from './createQueryKeys';
+import type { AnyNonDefKey, GetKeyMeta, GetKeyValue } from './createQueryKeys';
 import type { QueryFunction } from './createReactQueryFactories';
 import type {
   UseInfiniteQueryOptions as TanstackUseInfiniteQueryOptions,
   UseInfiniteQueryResult,
 } from './tanstack-fixes';
 import { NoInfer, PickRequired, QueryArgs, QueryContext } from './utils';
-
-// TODO: rename
-type GetInfiniteDataType<T extends InfiniteData<any>> = T['pages'][number];
 
 type GetPreviousPageParamFunction<TQueryFnData = unknown, TPageParam = unknown> = (
   firstPage: TQueryFnData,
@@ -22,12 +19,12 @@ type GetNextPageParamFunction<TQueryFnData = unknown, TPageParam = unknown> = (
 ) => TPageParam;
 
 type InfiniteQueryOptions<
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
 > = Omit<
   TanstackUseInfiniteQueryOptions<
-    GetInfiniteDataType<GetKeyMeta<TKey>['returnType']>,
+    GetKeyMeta<TKey>['TReturn'],
     TError,
     NoInfer<TData>,
     GetKeyValue<TKey>
@@ -46,24 +43,24 @@ type InfiniteQueryOptions<
    * This option can be used to transform or select a part of the data returned by the query
    * function.
    */
-  select?: (data: GetKeyMeta<TKey>['returnType']) => TData;
+  select?: (data: GetKeyMeta<TKey>['TData']) => TData;
 };
 
 type UseInfiniteQueryOptions<
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
   TContext = undefined,
   // TODO: Add support for select override
 > = Omit<InfiniteQueryOptions<TKey, TError, TData>, 'select'> &
   QueryContext<TContext> &
-  QueryArgs<GetKeyMeta<TKey>['fnArgs']>;
+  QueryArgs<GetKeyMeta<TKey>['TArgs']>;
 
 type InfiniteQueryConfig<
   TConfig,
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
   TPageParam = unknown,
   TContext = undefined,
 > = {
@@ -76,14 +73,14 @@ type InfiniteQueryConfig<
    * here.
    */
   request: (
-    args: GetKeyMeta<TKey>['fnArgs'],
+    args: GetKeyMeta<TKey>['TArgs'],
     pageParam: TPageParam | undefined,
   ) => TConfig | undefined | null | false;
 
   useOptions?:
     | InfiniteQueryOptions<TKey, TError, TData>
     | ((
-        args: GetKeyMeta<TKey>['fnArgs'],
+        args: GetKeyMeta<TKey>['TArgs'],
         context: TContext,
       ) => InfiniteQueryOptions<TKey, TError, TData>);
 
@@ -91,23 +88,17 @@ type InfiniteQueryConfig<
    * This function can be set to automatically get the previous cursor for infinite queries. The
    * result will also be used to determine the value of `hasPreviousPage`.
    */
-  getPreviousPageParam?: GetPreviousPageParamFunction<
-    GetInfiniteDataType<GetKeyMeta<TKey>['returnType']>,
-    TPageParam
-  >;
+  getPreviousPageParam?: GetPreviousPageParamFunction<GetKeyMeta<TKey>['TReturn'], TPageParam>;
 
   /**
    * This function can be set to automatically get the next cursor for infinite queries. The result
    * will also be used to determine the value of `hasNextPage`.
    */
-  getNextPageParam?: GetNextPageParamFunction<
-    GetInfiniteDataType<GetKeyMeta<TKey>['returnType']>,
-    TPageParam
-  >;
+  getNextPageParam?: GetNextPageParamFunction<GetKeyMeta<TKey>['TReturn'], TPageParam>;
 };
 
 type UseInfiniteQueryHookParams<
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError,
   TData,
   TContext,
@@ -115,14 +106,14 @@ type UseInfiniteQueryHookParams<
   ? [queryOpts?: UseInfiniteQueryOptions<TKey, TError, TData, TContext>]
   : [queryOpts: UseInfiniteQueryOptions<TKey, TError, TData, TContext>];
 
-type UseInfiniteQueryHook<TKey extends KeyConstraint, TError, TData, TContext> = <TTData = TData>(
+type UseInfiniteQueryHook<TKey extends AnyNonDefKey, TError, TData, TContext> = <TTData = TData>(
   ...args: UseInfiniteQueryHookParams<TKey, TError, TTData, TContext>
 ) => UseInfiniteQueryResult<TTData, TError>;
 
 export type CreateInfiniteQuery<TConfig> = <
-  TKey extends KeyConstraint,
+  TKey extends AnyNonDefKey,
   TError = unknown,
-  TData = GetKeyMeta<TKey>['returnType'],
+  TData = GetKeyMeta<TKey>['TData'],
   TPageParam = unknown,
   TContext = undefined,
 >(
@@ -140,7 +131,7 @@ export const createInfiniteQueryFactory = <TConfig>(
   options: CreateInfiniteQueryFactoryOptions<TConfig>,
 ): CreateInfiniteQuery<TConfig> => {
   return (
-    queryKey: KeyConstraint,
+    queryKey: AnyNonDefKey,
     {
       request: configRequest,
       useOptions: configUseOptions,
