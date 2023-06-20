@@ -3,7 +3,8 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { Expand, WrapArgInTuple, expandType } from './utils';
 
 const KeyMetadataSymbol = Symbol('KeyMetadataSymbol');
-const DefKeySymbol = Symbol('DefKeySymbol');
+const KeyDefSymbol = Symbol('DefKeySymbol');
+const GlobalKeyDefSymbol = Symbol('GlobalKeyDefSymbol');
 
 enum KeyType {
   Def = 'Def',
@@ -14,10 +15,10 @@ enum KeyType {
   InfiniteDynamic = 'InfiniteDynamic',
 }
 
-type KeyValue = unknown[];
+export type KeyValue = unknown[] | readonly unknown[];
 
-type AnyKeyMeta = KeyMeta<KeyType, any, any, any[]>;
-type KeyMeta<TType extends KeyType, TReturn, TData = TReturn, TArgs extends any[] = []> = {
+export type AnyKeyMeta = KeyMeta<KeyType, any, any, any[]>;
+export type KeyMeta<TType extends KeyType, TReturn, TData = TReturn, TArgs extends any[] = []> = {
   /** Exist in runtime */
   TType: TType;
   /** Only type */
@@ -45,42 +46,32 @@ function withKeyMeta<T extends {}, TMeta extends AnyKeyMeta>(
   });
 }
 
-type WithDefKey<T, TNested extends Record<string, AnyNonDefKey>> = T & {
-  [DefKeySymbol]: TNested;
-};
-
-/**
- * TODO: Rewrite using "partial type arguments" when released
- *
- * @see https://github.com/microsoft/TypeScript/pull/26349
- */
-function withDefKey<TNested extends Record<string, AnyNonDefKey>>() {
-  return <T extends {}>(target: T) => target as WithDefKey<T, TNested>;
-}
-
-type Key<
+export type AnyKeyObj = KeyObj<KeyValue, AnyKeyMeta, Record<any, any>>;
+export type KeyObj<
   TKey extends KeyValue,
   TMeta extends AnyKeyMeta,
   TNested extends Record<string, AnyNonDefKey> = {},
 > = WithKeyMeta<{ queryKey: TKey }, TMeta> & TNested;
 
-function createKey<
+function createKeyObj<
   TKey extends KeyValue,
   TMeta extends AnyKeyMeta,
   TNested extends Record<string, AnyNonDefKey> = {},
->(key: TKey, meta: TMeta, nestedKeys?: TNested): Key<TKey, TMeta, TNested> {
+>(key: TKey, meta: TMeta, nestedKeys?: TNested): KeyObj<TKey, TMeta, TNested> {
   return Object.assign(withKeyMeta({ queryKey: key }, meta), nestedKeys);
 }
 
-type KeyFn<
+export type AnyKeyFn = KeyFn<KeyValue, AnyKeyMeta, Record<any, any>>;
+export type KeyFn<
   TKey extends KeyValue,
   TMeta extends AnyKeyMeta,
   TNested extends Record<string, AnyNonDefKey> = {},
 > = WithKeyMeta<
-  (...args: TMeta['TArgs']) => Key<[...TKey, TMeta['TArgs']], TMeta, TNested>,
+  (...args: TMeta['TArgs']) => KeyObj<[...TKey, TMeta['TArgs']], TMeta, TNested>,
   TMeta
-> &
-  DefKey<TKey, TMeta, TNested>;
+> & {
+  _def: KeyDef<TKey, KeyObj<[...TKey, TMeta['TArgs']], TMeta, TNested>>;
+};
 
 function createKeyFn<
   TKey extends KeyValue,
@@ -91,38 +82,40 @@ function createKeyFn<
   meta: TMeta,
   nestedKeys?: (key: [...TKey, TMeta['TArgs']]) => TNested,
 ): KeyFn<TKey, TMeta, TNested> {
-  const fn = (...args: TMeta['TArgs']): Key<[...TKey, TMeta['TArgs']], TMeta, TNested> =>
-    createKey([...key, args], meta, nestedKeys?.([...key, args]));
-  return Object.assign(withKeyMeta(fn, meta), createDefKey<TNested>()(key, meta));
+  const fn = (...args: TMeta['TArgs']): KeyObj<[...TKey, TMeta['TArgs']], TMeta, TNested> =>
+    createKeyObj([...key, args], meta, nestedKeys?.([...key, args]));
+  return Object.assign(withKeyMeta(fn, meta), { _def: createKeyDef<ReturnType<typeof fn>>()(key) });
 }
 
-type DefKey<
-  TKey extends KeyValue,
-  TMeta extends AnyKeyMeta,
-  TNested extends Record<string, AnyNonDefKey>,
-> = { _def: WithDefKey<WithKeyMeta<TKey, TMeta>, TNested> };
-
-function createDefKey<TNested extends Record<string, AnyNonDefKey> = {}>() {
-  return <TKey extends KeyValue, TMeta extends AnyKeyMeta>(
-    key: TKey,
-    meta: TMeta,
-  ): DefKey<TKey, TMeta, TNested> => ({ _def: withDefKey<TNested>()(withKeyMeta(key, meta)) });
-}
-
-type GlobalDefKey<TKey extends KeyValue, TNested extends Record<string, AnyNonDefKey>> = {
-  _def: WithDefKey<TKey, TNested>;
+// TODO: `DefKey` should accept `TNestedKey extends AnyKeyFn` instead of `TMeta` and `TNested`
+// We need this to correctly infer `Query` type in `ResolveNestedKeys` and `MapKeyToQuery`.
+// By correctly I mean the key, that `_def` is attached to, should be used to infer `Query`
+// type, instead of the `DefKey` itself. This is because `DefKey` is not an actual key and
+// you cannot create query with this key - it should be used only in `QueryFilter`.
+export type AnyKeyDef = KeyDef<KeyValue, AnyKeyObj>;
+export type KeyDef<TKey extends KeyValue, TBoundKey extends AnyKeyObj> = TKey & {
+  [KeyDefSymbol]: TBoundKey;
 };
 
-function createGlobalDefKey<TNested extends Record<string, AnyNonDefKey> = {}>() {
-  return <TKey extends KeyValue>(key: TKey): GlobalDefKey<TKey, TNested> => ({
-    _def: withDefKey<TNested>()(key),
-  });
+function createKeyDef<TBoundKey extends AnyKeyObj>() {
+  return <TKey extends KeyValue>(key: TKey): KeyDef<TKey, TBoundKey> =>
+    Object.assign(key, {
+      [KeyDefSymbol]: true as any as TBoundKey,
+    });
 }
 
-export type AnyNonDefKey =
-  | Key<any, AnyKeyMeta, Record<any, any>>
-  | KeyFn<any, AnyKeyMeta, Record<any, any>>;
-export type AnyKey = AnyNonDefKey | DefKey<any, AnyKeyMeta, any> | GlobalDefKey<any, any>;
+export type AnyGlobalKeyDef = GlobalKeyDef<KeyValue, Record<any, any>>;
+export type GlobalKeyDef<
+  TKey extends KeyValue,
+  TNested extends Record<string, AnyNonDefKey>,
+> = TKey & { [GlobalKeyDefSymbol]: TNested };
+
+function createGlobalKeyDef<TNested extends Record<string, AnyNonDefKey> = {}>() {
+  return <TKey extends KeyValue>(key: TKey) => key as GlobalKeyDef<TKey, TNested>;
+}
+
+export type AnyNonDefKey = AnyKeyObj | AnyKeyFn;
+export type AnyKey = AnyNonDefKey | AnyKeyDef | AnyGlobalKeyDef;
 
 type StaticKeyMeta<TReturn> = KeyMeta<KeyType.Static, TReturn>;
 type InfiniteStaticKeyMeta<TReturn> = KeyMeta<
@@ -171,12 +164,12 @@ export type StaticKey<
   TKey extends KeyValue,
   TReturn,
   TNested extends Record<string, AnyNonDefKey> = {},
-> = Key<TKey, StaticKeyMeta<TReturn>, TNested>;
+> = KeyObj<TKey, StaticKeyMeta<TReturn>, TNested>;
 export type InfiniteStaticKey<
   TKey extends KeyValue,
   TReturn,
   TNested extends Record<string, AnyNonDefKey> = {},
-> = Key<TKey, InfiniteStaticKeyMeta<TReturn>, TNested>;
+> = KeyObj<TKey, InfiniteStaticKeyMeta<TReturn>, TNested>;
 export type DynamicKey<
   TKey extends KeyValue,
   TReturn,
@@ -279,8 +272,9 @@ type FallbackMapFactorySchema<TKey extends KeyValue, TSchema> = Expand<
 >;
 
 type QueryKeyFactoryResult<TKey extends string, TSchema extends FactorySchema> = Expand<
-  MapFactorySchema<[TKey], TSchema> &
-    GlobalDefKey<[TKey], Expand<MapFactorySchema<[TKey], TSchema>>>
+  MapFactorySchema<[TKey], TSchema> & {
+    _def: GlobalKeyDef<[TKey], Expand<MapFactorySchema<[TKey], TSchema>>>;
+  }
 >;
 
 type SchemaBuilder<T> = (keyBuilder: KeyBuilder) => T;
@@ -296,7 +290,7 @@ function mapFactorySchema<TKey extends KeyValue, TSchema extends FactorySchema>(
 
     if (isKeyMeta(meta, KeyType.Static) || isKeyMeta(meta, KeyType.InfiniteStatic)) {
       const nestedKeys = !(value instanceof Function) && mapFactorySchema([...rootKey, key], value);
-      result[key] = createKey([...rootKey, key], meta, nestedKeys || undefined);
+      result[key] = createKeyObj([...rootKey, key], meta, nestedKeys || undefined);
     } else if (isKeyMeta(meta, KeyType.Dynamic) || isKeyMeta(meta, KeyType.InfiniteDynamic)) {
       const nestedKeys =
         !(value instanceof Function) &&
@@ -308,22 +302,20 @@ function mapFactorySchema<TKey extends KeyValue, TSchema extends FactorySchema>(
   return result as MapFactorySchema<TKey, TSchema>;
 }
 
-export type GetKeyValue<T extends AnyKey> = T extends Key<infer K, any, Record<any, any>>
-  ? K
-  : T extends KeyFn<infer K, any, Record<any, any>>
-  ? K
-  : T extends DefKey<infer K, any, Record<any, any>>
-  ? K
-  : T extends GlobalDefKey<infer K, Record<any, any>>
+export type GetKeyValue<T extends AnyKey> = T extends
+  | KeyObj<infer K, AnyKeyMeta, Record<any, any>>
+  | KeyFn<infer K, AnyKeyMeta, Record<any, any>>
+  | KeyDef<infer K, AnyKeyObj>
+  | GlobalKeyDef<infer K, Record<any, any>>
   ? K
   : never;
 
-export type GetKeyMeta<T extends AnyKey> = T extends Key<any, infer K, Record<any, any>>
+export type GetKeyMeta<T extends AnyKey> = T extends
+  | KeyObj<KeyValue, infer K, Record<any, any>>
+  | KeyFn<KeyValue, infer K, Record<any, any>>
   ? K
-  : T extends KeyFn<any, infer K, Record<any, any>>
-  ? K
-  : T extends DefKey<any, infer K, Record<any, any>>
-  ? K
+  : T extends KeyDef<KeyValue, infer K>
+  ? GetKeyMeta<K>
   : never;
 
 /**
@@ -378,18 +370,33 @@ export type GetKeyMeta<T extends AnyKey> = T extends Key<any, infer K, Record<an
  * - Every "any" represent any value ("any" as in TS `any`)
  * - `queryKey` length should match strictly (so that we don't match nested keys accidentally)
  *
- * @example
- *   useTestQuery.helper(queryClient).setQueriesData(() => {});
- *   testKeys.events(any).filter(any);
- *   // => ["test", "events", any, "filter", any]
+ * Example:
  *
- *   useTestQuery.helper(queryClient).setQueriesData([[1]], () => {});
- *   testKeys.events(1).filter(any);
- *   // => ["test", "events", [1], "filter", any]
+ * ```ts
+ * useTestQuery.helper(queryClient).setQueriesData(() => {});
+ * testKeys.events(any).filter(any);
+ * // => ["test", "events", any, "filter", any]
  *
- *   useTestQuery.helper(queryClient).setQueriesData([[1], ['asd']], () => {});
- *   testKeys.events(1).filter('asd');
- *   // => ["test", "events", [1], "filter", ['asd']]
+ * useTestQuery.helper(queryClient).setQueriesData([[1]], () => {});
+ * testKeys.events(1).filter(any);
+ * // => ["test", "events", [1], "filter", any]
+ *
+ * useTestQuery.helper(queryClient).setQueriesData([[1], ['asd']], () => {});
+ * testKeys.events(1).filter('asd');
+ * // => ["test", "events", [1], "filter", ['asd']]
+ * ```
+ *
+ * TODO: Ability to use nested keys in dynamic queries without calling them
+ *
+ * Example: `testKeys.byId.likes`
+ *
+ * This is needed so that we can defined queries with dynamic nested keys, use these keys in
+ * `matchQueryByKey`, etc.
+ *
+ * Problems:
+ *
+ * - Nested key name can clash with functions methods
+ * - How can we determine if nested key of another nested key is dynamic or not?
  */
 export function createQueryKeys<TKey extends string, TSchema extends FactorySchema>(
   queryDef: TKey,
@@ -397,7 +404,9 @@ export function createQueryKeys<TKey extends string, TSchema extends FactorySche
 ): QueryKeyFactoryResult<TKey, TSchema> {
   const key: [TKey] = [queryDef];
   const result = mapFactorySchema(key, schemaFactory(keyBuilder));
-  return expandType(Object.assign(result, createGlobalDefKey<Expand<typeof result>>()(key)));
+  return expandType(
+    Object.assign(result, { _def: createGlobalKeyDef<Expand<typeof result>>()(key) }),
+  );
 }
 
 if (import.meta.vitest) {
@@ -416,47 +425,57 @@ if (import.meta.vitest) {
 
   test('Correct type', () => {
     type ExpectedTestKeysDef = {
-      _def: WithDefKey<['test'], ExpectedTestKeys>;
+      _def: ['test'] & { [GlobalKeyDefSymbol]: ExpectedTestKeys };
     };
 
     type ExpectedTestKeys = {
-      all: Key<['test', 'all'], StaticKeyMeta<unknown>>;
+      all: KeyObj<['test', 'all'], StaticKeyMeta<unknown>>;
       detail: WithKeyMeta<
         ((
           userId: string,
-        ) => Key<
+        ) => KeyObj<
           ['test', 'detail', [userId: string]],
           DynamicKeyMeta<string, [userId: string]>
         >) & {
-          _def: WithKeyMeta<['test', 'detail'], DynamicKeyMeta<string, [userId: string]>>;
+          _def: KeyDef<
+            ['test', 'detail'],
+            KeyObj<['test', 'detail', [userId: string]], DynamicKeyMeta<string, [userId: string]>>
+          >;
         },
         DynamicKeyMeta<string, [userId: string]>
       >;
-      list: Key<['test', 'list'], StaticKeyMeta<boolean>> & {
+      list: KeyObj<['test', 'list'], StaticKeyMeta<boolean>> & {
         search: WithKeyMeta<
           ((arg: {
             lol: string;
-          }) => Key<
+          }) => KeyObj<
             ['test', 'list', 'search', [{ lol: string }]],
             DynamicKeyMeta<string, [{ lol: string }]>
           >) & {
-            _def: WithKeyMeta<
+            _def: KeyDef<
               ['test', 'list', 'search'],
-              DynamicKeyMeta<string, [{ lol: string }]>
+              KeyObj<
+                ['test', 'list', 'search', [{ lol: string }]],
+                DynamicKeyMeta<string, [{ lol: string }]>
+              >
             >;
           },
           DynamicKeyMeta<string, [{ lol: string }]>
         >;
       };
       byId: WithKeyMeta<
-        ((id: string) => Key<
+        ((id: string) => KeyObj<
           ['test', 'byId', [id: string]],
           DynamicKeyMeta<boolean, [id: string]>
         > & {
-          likes: Key<['test', 'byId', [string], 'likes'], StaticKeyMeta<number>>;
+          likes: KeyObj<['test', 'byId', [string], 'likes'], StaticKeyMeta<number>>;
         }) & {
-          // FIXME: It should also have nestedKeys, but TS cannot validate this
-          _def: WithKeyMeta<['test', 'byId'], DynamicKeyMeta<boolean, [id: string]>>;
+          _def: KeyDef<
+            ['test', 'byId'],
+            KeyObj<['test', 'byId', [id: string]], DynamicKeyMeta<boolean, [id: string]>> & {
+              likes: KeyObj<['test', 'byId', [string], 'likes'], StaticKeyMeta<number>>;
+            }
+          >;
         },
         DynamicKeyMeta<boolean, [id: string]>
       >;
@@ -478,26 +497,24 @@ if (import.meta.vitest) {
   });
 
   test('Correct runtime value', () => {
-    const key = (x: unknown[], type: KeyType) => createKey(x, createKeyMeta(type));
-    const def = (x: unknown[], type: KeyType) => createDefKey()(x, createKeyMeta(type))._def;
+    const key = (x: unknown[], type: KeyType) => createKeyObj(x, createKeyMeta(type));
+    const def = (x: unknown[]) => createKeyDef()(x);
 
-    expect(testKeys._def).toStrictEqual(createGlobalDefKey()(['test'])._def);
+    expect(testKeys._def).toStrictEqual(createGlobalKeyDef()(['test']));
     expect(testKeys.all).toStrictEqual(key(['test', 'all'], KeyType.Static));
 
-    expect(testKeys.detail._def).toStrictEqual(def(['test', 'detail'], KeyType.Dynamic));
+    expect(testKeys.detail._def).toStrictEqual(def(['test', 'detail']));
     expect(testKeys.detail('string')).toStrictEqual(
       key(['test', 'detail', ['string']], KeyType.Dynamic),
     );
 
     expect(testKeys.list).toMatchObject(key(['test', 'list'], KeyType.Static));
-    expect(testKeys.list.search._def).toStrictEqual(
-      def(['test', 'list', 'search'], KeyType.Dynamic),
-    );
+    expect(testKeys.list.search._def).toStrictEqual(def(['test', 'list', 'search']));
     expect(testKeys.list.search({ lol: 'string' })).toStrictEqual(
       key(['test', 'list', 'search', [{ lol: 'string' }]], KeyType.Dynamic),
     );
 
-    expect(testKeys.byId._def).toStrictEqual(def(['test', 'byId'], KeyType.Dynamic));
+    expect(testKeys.byId._def).toStrictEqual(def(['test', 'byId']));
     expect(testKeys.byId('string')).toMatchObject(
       key(['test', 'byId', ['string']], KeyType.Dynamic),
     );
