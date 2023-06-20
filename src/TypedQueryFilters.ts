@@ -11,7 +11,9 @@ import {
   GlobalKeyDef,
   KeyDef,
   KeyFn,
+  KeyMeta,
   KeyObj,
+  KeyType,
   KeyValue,
 } from './createQueryKeys';
 import { Falsy } from './utils';
@@ -28,7 +30,7 @@ type NestedKeysToUnion<TNested extends Record<any, AnyNonDefKey>> = {
     : never;
 }[keyof TNested];
 
-type ResolveNestedKeys<TKey extends AnyKey, TExact extends boolean = false> =
+export type ResolveNestedKeys<TKey extends AnyKey, TExact extends boolean = false> =
   | TKey
   | (TExact extends false
       ? TKey extends
@@ -40,33 +42,77 @@ type ResolveNestedKeys<TKey extends AnyKey, TExact extends boolean = false> =
         : never
       : never);
 
-type AnyTestKey = AnyKeyObj | AnyKeyDef | AnyGlobalKeyDef;
+/**
+ * `KeyFn` cannot be used for filtering, as it is a function that requires passing user-defined
+ * params. It's return value (which is `KeyObj`) should be used instead.
+ */
+export type AnyFilterKey = AnyKeyObj | AnyKeyDef | AnyGlobalKeyDef;
 
-type MapKeyToQuery<TKey extends AnyKey> = TKey extends KeyObj<infer K, infer Meta, Record<any, any>>
+export type KeyToQuery<TKey extends AnyKey> = TKey extends KeyObj<
+  infer K,
+  infer Meta,
+  Record<any, any>
+>
   ? Query<Meta['TReturn'], unknown, Meta['TData'], K>
   : TKey extends KeyFn<KeyValue, infer Meta, Record<any, any>>
   ? Query<Meta['TReturn'], unknown, Meta['TData'], GetKeyValue<ReturnType<TKey>>>
   : TKey extends KeyDef<KeyValue, infer BoundKey>
-  ? MapKeyToQuery<BoundKey>
+  ? KeyToQuery<BoundKey>
   : never;
 
+export type NestedKeysToQuery<TKey extends AnyKey, TExact extends boolean = false> = KeyToQuery<
+  ResolveNestedKeys<TKey, TExact>
+>;
+
 export type TypedQueryFilters<
-  TKey extends AnyTestKey,
+  TKey extends AnyFilterKey,
   TExact extends boolean = false,
-  TQuery extends MapKeyToQuery<ResolveNestedKeys<TKey, TExact>> = MapKeyToQuery<
-    ResolveNestedKeys<TKey, TExact>
-  >,
+  TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
 > = Omit<QueryFilters, 'predicate' | 'queryKey' | 'exact'> & {
   /** Include queries matching this query key */
   queryKey?: TKey;
   /** Include queries matching this predicate function */
   predicate?:
-    | ((query: MapKeyToQuery<ResolveNestedKeys<TKey, TExact>>) => boolean)
-    | ((query: MapKeyToQuery<ResolveNestedKeys<TKey, TExact>>) => query is TQuery)
-    | ((query: MapKeyToQuery<ResolveNestedKeys<TKey, TExact>>) => TQuery | Falsy);
+    | ((query: NestedKeysToQuery<TKey, TExact>) => boolean)
+    | ((query: NestedKeysToQuery<TKey, TExact>) => query is TQuery)
+    | ((query: NestedKeysToQuery<TKey, TExact>) => TQuery | Falsy);
   /** Match query key exactly */
   exact?: TExact;
 };
+
+export type GetMetaFromQuery<T extends Query> = T extends Query<
+  infer IReturn,
+  unknown,
+  infer IData,
+  KeyValue
+>
+  ? KeyMeta<KeyType.Static, IReturn, IData>
+  : never;
+
+export function typedQueryFilterToRegular<
+  TKey extends AnyFilterKey,
+  TExact extends boolean = false,
+  TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+>(filters: TypedQueryFilters<TKey, TExact, TQuery>): QueryFilters;
+export function typedQueryFilterToRegular<
+  TKey extends AnyFilterKey,
+  TExact extends boolean = false,
+  TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+>(filters?: TypedQueryFilters<TKey, TExact, TQuery>): QueryFilters | undefined;
+export function typedQueryFilterToRegular(
+  filters?: TypedQueryFilters<any, any, any>,
+): QueryFilters | undefined {
+  return filters
+    ? {
+        ...filters,
+        queryKey:
+          filters.queryKey && 'queryKey' in filters.queryKey
+            ? filters.queryKey.queryKey
+            : filters.queryKey,
+        predicate: filters.predicate && ((query) => Boolean(filters.predicate!(query as Query))),
+      }
+    : undefined;
+}
 
 if (import.meta.vitest) {
   const { describe, test, assertType } = await import('vitest');

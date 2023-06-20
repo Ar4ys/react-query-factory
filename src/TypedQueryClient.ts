@@ -19,18 +19,40 @@ import {
   WithRequired,
 } from '@tanstack/react-query';
 
+import {
+  AnyFilterKey,
+  GetMetaFromQuery,
+  NestedKeysToQuery,
+  TypedQueryFilters,
+  typedQueryFilterToRegular,
+} from './TypedQueryFilters';
+
 /** TODO: Documentation */
 export class TypedQueryClient {
   constructor(public queryClient: QueryClient) {}
 
-  // isFetching(filters?: QueryFilters): number {}
+  isFetching<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(filters?: TypedQueryFilters<TKey, TExact, TQuery>): number {
+    return this.queryClient.isFetching(typedQueryFilterToRegular(filters));
+  }
 
-  // isMutating(filters?: MutationFilters): number {}
+  // TODO: Create `TypedMutationFilters`
+  isMutating(filters?: MutationFilters): number {
+    return this.queryClient.isMutating(filters);
+  }
 
-  // getQueryData<TQueryFnData = unknown>(
-  //   queryKey: QueryKey,
-  //   filters?: QueryFilters,
-  // ): TQueryFnData | undefined {}
+  getQueryData<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(
+    filters: TypedQueryFilters<TKey, TExact, TQuery>,
+  ): GetMetaFromQuery<TQuery>['TReturn'] | undefined {
+    return this.queryClient.getQueryData([], typedQueryFilterToRegular(filters));
+  }
 
   // ensureQueryData<
   //   TQueryFnData = unknown,

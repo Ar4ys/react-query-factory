@@ -6,7 +6,7 @@ const KeyMetadataSymbol = Symbol('KeyMetadataSymbol');
 const KeyDefSymbol = Symbol('DefKeySymbol');
 const GlobalKeyDefSymbol = Symbol('GlobalKeyDefSymbol');
 
-enum KeyType {
+export enum KeyType {
   Def = 'Def',
   GlobalDef = 'GlobalDef',
   Static = 'Static',
