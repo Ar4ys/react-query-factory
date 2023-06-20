@@ -73,7 +73,12 @@ if (import.meta.vitest) {
   const { matchQueryByKey } = await import('./matchQueryByKey');
   const { createQueryKeys } = await import('./createQueryKeys');
 
-  type Q<TData, TKey extends KeyValue> = Query<TData, unknown, TData, TKey>;
+  type Q<TData = unknown, TKey extends KeyValue = readonly unknown[]> = Query<
+    TData,
+    unknown,
+    TData,
+    TKey
+  >;
 
   describe('TypedQueryFilters', () => {
     const testKeys = createQueryKeys('test', (key) => ({
@@ -88,14 +93,53 @@ if (import.meta.vitest) {
     }));
 
     function testFilterType<
-      TKey extends AnyTestKey,
+      TKey extends AnyFilterKey,
       TExact extends boolean = false,
-      TQuery extends MapKeyToQuery<ResolveNestedKeys<TKey, TExact>> = MapKeyToQuery<
-        ResolveNestedKeys<TKey, TExact>
-      >,
+      TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
     >(_filter: TypedQueryFilters<TKey, TExact, TQuery>): TQuery {
       return null!;
     }
+
+    describe('empty', () => {
+      test('empty', () => {
+        type Expected = Q;
+        assertType<Expected>(testFilterType({}));
+      });
+
+      describe('with predicate', () => {
+        test('(query) => boolean', () => {
+          type Expected = Q;
+          assertType<Expected>(
+            testFilterType({
+              predicate(query): boolean {
+                assertType<Expected>(query);
+                return true;
+              },
+            }),
+          );
+        });
+
+        test('(query) => query is TQuery', () => {
+          type Expected = Q<string, ['lol']>;
+          assertType<Expected>(
+            testFilterType({
+              predicate(query): query is Expected {
+                return true;
+              },
+            }),
+          );
+        });
+
+        test('(query) => TQuery | undefined', () => {
+          type Expected = Q<string, ['lol']>;
+          assertType<Expected>(
+            testFilterType({
+              predicate: (query) => query as Expected,
+            }),
+          );
+        });
+      });
+    });
 
     describe('queryKey', () => {
       test('static key', () => {
