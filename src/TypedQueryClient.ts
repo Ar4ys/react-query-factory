@@ -14,7 +14,7 @@ import {
   KeyObj,
   KeyValue,
 } from './createQueryKeys';
-import { Mutable, todo } from './utils';
+import { Falsy, Mutable, todo } from './utils';
 
 type NestedKeysToUnion<TNested extends Record<any, AnyNonDefKey>> = {
   [K in keyof TNested]: TNested[K] extends KeyObj<
@@ -50,15 +50,20 @@ type MapKeyToQuery<TKey extends AnyKey> = TKey extends KeyObj<infer K, infer Met
   ? MapKeyToQuery<BoundKey>
   : never;
 
-type TypedQueryFilters<TKey extends AnyTestKey, TExact extends boolean = false> = Omit<
-  QueryFilters,
-  'predicate' | 'queryKey' | 'exact'
-> & {
+type TypedQueryFilters<
+  TKey extends AnyTestKey,
+  TExact extends boolean = false,
+  TQuery extends MapKeyToQuery<ResolveNestedKeys<TKey, TExact>> = MapKeyToQuery<
+    ResolveNestedKeys<TKey, TExact>
+  >,
+> = Omit<QueryFilters, 'predicate' | 'queryKey' | 'exact'> & {
   /** Include queries matching this query key */
   queryKey?: TKey;
   /** Include queries matching this predicate function */
-  // TODO: ((query) => boolean) | ((query) => query is TQuery) | ((query) => TQuery | Falsy)
-  predicate?: (query: MapKeyToQuery<ResolveNestedKeys<TKey, TExact>>) => boolean;
+  predicate?:
+    | ((query: MapKeyToQuery<ResolveNestedKeys<TKey, TExact>>) => boolean)
+    | ((query: MapKeyToQuery<ResolveNestedKeys<TKey, TExact>>) => query is TQuery)
+    | ((query: MapKeyToQuery<ResolveNestedKeys<TKey, TExact>>) => TQuery | Falsy);
   /** Match query key exactly */
   exact?: TExact;
 };
@@ -86,7 +91,7 @@ if (import.meta.vitest) {
 
   describe('TypedQueryFilters', () => {
     const testKeys = createQueryKeys('test', (key) => ({
-      all: key(),
+      all: key<number>(),
       detail: key.dynamic<string, [userId: string]>(),
       list: key<boolean>()({
         search: key.dynamic<string, { lol: string }>(),
@@ -96,59 +101,128 @@ if (import.meta.vitest) {
       }),
     }));
 
-    function testFilter<TKey extends AnyTestKey, TExact extends boolean = false>(
-      _filter: TypedQueryFilters<TKey, TExact>,
-    ) {}
+    function testFilterType<
+      TKey extends AnyTestKey,
+      TExact extends boolean = false,
+      TQuery extends MapKeyToQuery<ResolveNestedKeys<TKey, TExact>> = MapKeyToQuery<
+        ResolveNestedKeys<TKey, TExact>
+      >,
+    >(_filter: TypedQueryFilters<TKey, TExact, TQuery>): TQuery {
+      return null!;
+    }
 
-    test('typing', () => {
-      testFilter({
-        exact: false,
-        queryKey: testKeys.detail(''),
-        predicate(query) {
-          assertType<Q<string, ['test', 'detail', [userId: string]]>>(query);
-          return true;
-        },
+    describe('queryKey', () => {
+      test('static key', () => {
+        type Expected = Q<number, ['test', 'all']>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.all,
+          }),
+        );
       });
 
-      testFilter({
-        exact: false,
-        queryKey: testKeys.detail._def,
-        predicate(query) {
-          assertType<Q<string, ['test', 'detail', [userId: string]]>>(query);
-          return true;
-        },
+      test('dynamic key', () => {
+        type Expected = Q<string, ['test', 'detail', [userId: string]]>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.detail(''),
+          }),
+        );
       });
 
-      testFilter({
-        exact: false,
-        queryKey: testKeys.list,
-        predicate(query) {
-          assertType<
-            Q<boolean, ['test', 'list']> | Q<string, ['test', 'list', 'search', [{ lol: string }]]>
-          >(query);
-          return true;
-        },
+      test('dynamic key def', () => {
+        type Expected = Q<string, ['test', 'detail', [userId: string]]>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.detail._def,
+          }),
+        );
       });
 
-      testFilter({
-        exact: true,
-        queryKey: testKeys.list,
-        predicate(query) {
-          assertType<Q<boolean, ['test', 'list']>>(query);
-          return true;
-        },
+      test('nested static key', () => {
+        type Expected =
+          | Q<boolean, ['test', 'list']>
+          | Q<string, ['test', 'list', 'search', [{ lol: string }]]>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.list,
+          }),
+        );
       });
 
-      testFilter({
-        exact: false,
-        queryKey: testKeys.byId._def,
-        predicate(query) {
-          assertType<
-            | Q<boolean, ['test', 'byId', [id: string]]>
-            | Q<number, ['test', 'byId', [id: string], 'likes']>
-          >(query);
-          return true;
-        },
+      test('nested static exact', () => {
+        type Expected = Q<boolean, ['test', 'list']>;
+        assertType<Expected>(
+          testFilterType({
+            exact: true,
+            queryKey: testKeys.list,
+          }),
+        );
+      });
+
+      test('nested dynamic def', () => {
+        type Expected =
+          | Q<boolean, ['test', 'byId', [id: string]]>
+          | Q<number, ['test', 'byId', [id: string], 'likes']>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.byId._def,
+          }),
+        );
+      });
+    });
+
+    describe('predicate', () => {
+      test('(query) => boolean', () => {
+        type Expected =
+          | Q<boolean, ['test', 'list']>
+          | Q<string, ['test', 'list', 'search', [{ lol: string }]]>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.list,
+            predicate: () => true,
+          }),
+        );
+      });
+
+      test('(query) => query is TQuery', () => {
+        type Expected = Q<boolean, ['test', 'list']>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.list,
+            predicate: (query): query is Extract<typeof query, { queryKey: ['test', 'list'] }> =>
+              true,
+          }),
+        );
+      });
+
+      test('(query) => TQuery | Falsy', () => {
+        type Expected = Q<boolean, ['test', 'list']>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.list,
+            predicate: (query) => query as Extract<typeof query, { queryKey: ['test', 'list'] }>,
+          }),
+        );
+      });
+
+      test('(query) => TQuery | Falsy [matchQueryByKey]', () => {
+        type Expected = Q<boolean, ['test', 'list']>;
+        assertType<Expected>(
+          testFilterType({
+            exact: false,
+            queryKey: testKeys.list,
+            predicate: (query) => matchQueryByKey(query, ['test', 'list'] as const) && query,
+          }),
+        );
       });
     });
   });

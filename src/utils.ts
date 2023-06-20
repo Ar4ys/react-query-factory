@@ -1,3 +1,4 @@
+export type Falsy = undefined | null | false;
 export type NoInfer<T> = [T][T extends any ? 0 : never];
 export type PickRequired<T> = {
   [K in keyof T as undefined extends T[K] ? never : K]: T[K];
