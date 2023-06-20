@@ -12,6 +12,10 @@ export type Expand<T> = T extends object
     : never
   : T;
 
+export type Mutable<T> = {
+  -readonly [P in keyof T]: T[P];
+};
+
 /**
  * Noop function that is needed to satisfy TS in this scenario:
  *
@@ -35,3 +39,7 @@ export type QueryContext<T> = T extends undefined ? { ctx?: T } : { ctx: T };
 export type QueryArgs<T extends any[]> = PickRequiredTuple<T> extends []
   ? { args?: T }
   : { args: T };
+
+export function todo(message?: string): never {
+  throw new Error(message ?? '[TODO] Not implemented yet');
+}
