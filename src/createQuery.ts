@@ -1,4 +1,5 @@
 import {
+  Query,
   UseQueryOptions as TanstackUseQueryOptions,
   UseQueryResult,
   useQuery,
@@ -291,7 +292,12 @@ if (import.meta.vitest) {
     test('should be able to pass queryKey arguments', async () => {
       const useOptionsSpy = vi.fn();
       const useTest = createQuery(keys.dynamic, {
-        request: ([testArg]) => testArg,
+        request: ([id]) => id,
+        // @ts-expect-error
+        onError(error, query: Query) {
+          query.queryKey[2][0];
+          query.meta.args[0];
+        },
         useOptions: useOptionsSpy,
       });
 

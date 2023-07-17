@@ -17,7 +17,7 @@ export enum KeyType {
 
 export type KeyValue = unknown[] | readonly unknown[];
 
-export type AnyKeyMeta = KeyMeta<KeyType, any, any, any[]>;
+export type AnyKeyMeta<TType extends KeyType = KeyType> = KeyMeta<TType, any, any, any[]>;
 export type KeyMeta<TType extends KeyType, TReturn, TData = TReturn, TArgs extends any[] = []> = {
   /** Exist in runtime */
   TType: TType;
@@ -46,7 +46,11 @@ function withKeyMeta<T extends {}, TMeta extends AnyKeyMeta>(
   });
 }
 
-export type AnyKeyObj = KeyObj<KeyValue, AnyKeyMeta, Record<any, any>>;
+export type AnyKeyObj<TType extends KeyType = KeyType> = KeyObj<
+  KeyValue,
+  AnyKeyMeta<TType>,
+  Record<any, any>
+>;
 export type KeyObj<
   TKey extends KeyValue,
   TMeta extends AnyKeyMeta,

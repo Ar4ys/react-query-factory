@@ -14,7 +14,7 @@ export type Expand<T> = T extends object
   : T;
 
 export type Mutable<T> = {
-  -readonly [P in keyof T]: T[P];
+  -readonly [P in keyof T]: Mutable<T[P]>;
 };
 
 /**

@@ -1,4 +1,4 @@
-import { Query, QueryFilters } from '@tanstack/react-query';
+import { Query, QueryFilters, QueryState } from '@tanstack/react-query';
 
 import {
   AnyGlobalKeyDef,
@@ -16,7 +16,7 @@ import {
   KeyType,
   KeyValue,
 } from './createQueryKeys';
-import { Falsy } from './utils';
+import { Falsy, Mutable } from './utils';
 
 type NestedKeysToUnion<TNested extends Record<any, AnyNonDefKey>> = {
   [K in keyof TNested]: TNested[K] extends KeyObj<
@@ -80,13 +80,29 @@ export type TypedQueryFilters<
   exact?: TExact;
 };
 
-export type GetMetaFromQuery<T extends Query> = T extends Query<
+type AnyQuery = Query<any, any, any, any>;
+
+export type GetKeyFromQuery<T extends AnyQuery> = KeyObj<T['queryKey'], GetMetaFromQuery<T>>;
+
+export type GetMetaFromQuery<T extends AnyQuery> = T extends Query<
   infer IReturn,
-  unknown,
+  any,
   infer IData,
-  KeyValue
+  any
 >
   ? KeyMeta<KeyType.Static, IReturn, IData>
+  : never;
+
+// `TKey extends any` is needed here to create "distributive" operation
+// See: https://stackoverflow.com/a/62085569/13157478
+// See: https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types
+export type GetOptionalKeyQueryTuple<TKey extends AnyKey> = TKey extends any
+  ? [GetKeyValue<TKey>, KeyToQuery<TKey> | undefined]
+  : never;
+
+// TODO: TError
+export type GetQueryState<TQuery extends AnyQuery> = TQuery extends any
+  ? QueryState<GetMetaFromQuery<TQuery>['TReturn'], unknown>
   : never;
 
 export function typedQueryFilterToRegular<
@@ -105,13 +121,21 @@ export function typedQueryFilterToRegular(
   return filters
     ? {
         ...filters,
-        queryKey:
-          filters.queryKey && 'queryKey' in filters.queryKey
-            ? filters.queryKey.queryKey
-            : filters.queryKey,
+        queryKey: typedQueryKeyToRegular(filters.queryKey),
         predicate: filters.predicate && ((query) => Boolean(filters.predicate!(query as Query))),
       }
     : undefined;
+}
+
+export function typedQueryKeyToRegular<TKey extends AnyFilterKey>(
+  queryKey: TKey,
+): GetKeyValue<TKey>;
+export function typedQueryKeyToRegular<TKey extends AnyFilterKey>(
+  queryKey?: TKey,
+): GetKeyValue<TKey> | undefined;
+export function typedQueryKeyToRegular(queryKey?: AnyFilterKey): Required<KeyValue> | undefined {
+  if (!queryKey) return;
+  return 'queryKey' in queryKey ? queryKey.queryKey : queryKey;
 }
 
 if (import.meta.vitest) {
@@ -228,6 +252,8 @@ if (import.meta.vitest) {
             queryKey: testKeys.list,
           }),
         );
+
+        type A = GetKeyFromQuery<Expected>;
       });
 
       test('nested static exact', () => {

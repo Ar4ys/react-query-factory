@@ -1,7 +1,10 @@
 import {
+  CancelOptions,
   DefaultOptions,
   DefaultedQueryObserverOptions,
   FetchQueryOptions,
+  InvalidateOptions,
+  InvalidateQueryFilters,
   Logger,
   MutationCache,
   MutationFilters,
@@ -14,6 +17,11 @@ import {
   QueryKey,
   QueryObserverOptions,
   QueryState,
+  RefetchOptions,
+  RefetchPageFilters,
+  RefetchQueryFilters,
+  ResetOptions,
+  ResetQueryFilters,
   SetDataOptions,
   Updater,
   WithRequired,
@@ -21,11 +29,73 @@ import {
 
 import {
   AnyFilterKey,
+  GetKeyFromQuery,
   GetMetaFromQuery,
+  GetOptionalKeyQueryTuple,
+  GetQueryState,
   NestedKeysToQuery,
+  ResolveNestedKeys,
   TypedQueryFilters,
   typedQueryFilterToRegular,
+  typedQueryKeyToRegular,
 } from './TypedQueryFilters';
+import { AnyKeyObj, AnyNonDefKey, GetKeyMeta, GetKeyValue, KeyType } from './createQueryKeys';
+
+type TypedFetchQueryOptions<TKey extends AnyKeyObj, TError = unknown> = Omit<
+  FetchQueryOptions<
+    GetKeyMeta<TKey>['TReturn'],
+    TError,
+    GetKeyMeta<TKey>['TData'],
+    GetKeyValue<TKey>
+  >,
+  'queryKey'
+> & {
+  queryKey?: TKey;
+};
+
+type TypedResetQueryFilters<
+  TKey extends AnyFilterKey,
+  TExact extends boolean = false,
+  TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+> = TypedQueryFilters<TKey, TExact, TQuery> &
+  RefetchPageFilters<GetMetaFromQuery<TQuery>['TReturn']>;
+
+type TypedRefetchQueryFilters<
+  TKey extends AnyFilterKey,
+  TExact extends boolean = false,
+  TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+> = TypedQueryFilters<TKey, TExact, TQuery> &
+  RefetchPageFilters<GetMetaFromQuery<TQuery>['TReturn']>;
+
+// Copied from `@tanstack/query-core`
+type QueryTypeFilter = 'all' | 'active' | 'inactive';
+
+type TypedInvalidateQueryFilters<
+  TKey extends AnyFilterKey,
+  TExact extends boolean = false,
+  TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+> = TypedQueryFilters<TKey, TExact, TQuery> &
+  RefetchPageFilters<GetMetaFromQuery<TQuery>['TReturn']> & {
+    refetchType?: QueryTypeFilter | 'none';
+  };
+
+type TypedQueryObserverOptions<TKey extends AnyKeyObj> = Omit<
+  QueryObserverOptions<
+    GetKeyMeta<TKey>['TReturn'],
+    unknown,
+    // TODO: Test this
+    // TODO: Should we pass `TData` as unknown?
+    // `TData` here is the result of `select` call. This means that if query provides
+    // `select` override - `TData` here will be different from actual `TData` and user
+    // will catch runtime error because shape of the data is different than expected.
+    unknown,
+    GetKeyMeta<TKey>['TData'],
+    GetKeyValue<TKey>
+  >,
+  'queryKey'
+> & {
+  queryKey?: TKey;
+};
 
 /** TODO: Documentation */
 export class TypedQueryClient {
@@ -54,84 +124,158 @@ export class TypedQueryClient {
     return this.queryClient.getQueryData([], typedQueryFilterToRegular(filters));
   }
 
-  // ensureQueryData<
-  //   TQueryFnData = unknown,
-  //   TError = unknown,
-  //   TData = TQueryFnData,
-  //   TQueryKey extends QueryKey = QueryKey,
-  // >(
-  //   options: WithRequired<FetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>, 'queryKey'>,
-  // ): Promise<TData> {}
+  // TODO: Add ability to pass TError
+  ensureQueryData<TKey extends AnyKeyObj>(
+    options: WithRequired<TypedFetchQueryOptions<TKey>, 'queryKey'>,
+  ): Promise<GetKeyMeta<TKey>['TData']> {
+    return this.queryClient.ensureQueryData({
+      ...options,
+      queryKey: typedQueryKeyToRegular(options.queryKey),
+    });
+  }
 
-  // getQueriesData<TQueryFnData = unknown>(
-  //   filters: QueryFilters,
-  // ): [QueryKey, TQueryFnData | undefined][] {}
+  getQueriesData<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(
+    filters: TypedQueryFilters<TKey, TExact, TQuery>,
+  ): GetOptionalKeyQueryTuple<GetKeyFromQuery<TQuery>>[] {
+    return this.queryClient.getQueriesData(
+      typedQueryFilterToRegular(filters),
+    ) as GetOptionalKeyQueryTuple<GetKeyFromQuery<TQuery>>[];
+  }
 
-  // setQueryData<TQueryFnData>(
-  //   queryKey: QueryKey,
-  //   updater: Updater<TQueryFnData | undefined, TQueryFnData | undefined>,
-  //   options?: SetDataOptions,
-  // ): TQueryFnData | undefined {}
+  setQueryData<TKey extends AnyFilterKey>(
+    queryKey: TKey,
+    updater: Updater<
+      GetKeyMeta<ResolveNestedKeys<TKey>>['TReturn'] | undefined,
+      GetKeyMeta<ResolveNestedKeys<TKey>>['TReturn'] | undefined
+    >,
+    options?: SetDataOptions,
+  ): GetKeyMeta<ResolveNestedKeys<TKey>>['TReturn'] | undefined {
+    return this.queryClient.setQueryData(typedQueryKeyToRegular(queryKey), updater, options);
+  }
 
-  // setQueriesData<TQueryFnData>(
-  //   filters: QueryFilters,
-  //   updater: Updater<TQueryFnData | undefined, TQueryFnData | undefined>,
-  //   options?: SetDataOptions,
-  // ): [QueryKey, TQueryFnData | undefined][] {}
+  setQueriesData<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(
+    filters: TypedQueryFilters<TKey, TExact, TQuery>,
+    // TODO: Should we create distributive Updated here?
+    // While this will provide better type safety (updater must return the same type that it receives),
+    // it makes it impossible to use without explicitly defining overloaded function
+    updater: Updater<
+      GetMetaFromQuery<TQuery>['TReturn'] | undefined,
+      GetMetaFromQuery<TQuery>['TReturn'] | undefined
+    >,
+    options?: SetDataOptions,
+  ): GetOptionalKeyQueryTuple<GetKeyFromQuery<TQuery>>[] {
+    return this.queryClient.setQueriesData(
+      typedQueryFilterToRegular(filters),
+      updater,
+      options,
+    ) as GetOptionalKeyQueryTuple<GetKeyFromQuery<TQuery>>[];
+  }
 
-  // getQueryState<TQueryFnData = unknown, TError = undefined>(
-  //   queryKey: QueryKey,
-  //   filters?: QueryFilters,
-  // ): QueryState<TQueryFnData, TError> | undefined {}
+  getQueryState<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(
+    queryKey: TKey,
+    filters?: Omit<TypedQueryFilters<TKey, TExact, TQuery>, 'queryKey'>,
+  ): GetQueryState<TQuery> | undefined {
+    return this.queryClient.getQueryState(
+      typedQueryKeyToRegular(queryKey),
+      typedQueryFilterToRegular(filters),
+    ) as GetQueryState<TQuery> | undefined;
+  }
 
-  // removeQueries(filters?: QueryFilters): void {}
+  removeQueries<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(filters?: TypedQueryFilters<TKey, TExact, TQuery>): void {
+    return this.queryClient.removeQueries(typedQueryFilterToRegular(filters));
+  }
 
-  // resetQueries<TPageData = unknown>(
-  //   filters?: ResetQueryFilters<TPageData>,
-  //   options?: ResetOptions,
-  // ): Promise<void> {}
+  resetQueries<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(filters?: TypedResetQueryFilters<TKey, TExact, TQuery>, options?: ResetOptions): Promise<void> {
+    return this.queryClient.resetQueries(typedQueryFilterToRegular(filters), options);
+  }
 
-  // cancelQueries(filters?: QueryFilters, options?: CancelOptions): Promise<void> {}
+  cancelQueries<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(filters?: TypedQueryFilters<TKey, TExact, TQuery>, options?: CancelOptions): Promise<void> {
+    return this.queryClient.cancelQueries(typedQueryFilterToRegular(filters), options);
+  }
 
-  // invalidateQueries<TPageData = unknown>(
-  //   filters?: InvalidateQueryFilters<TPageData>,
-  //   options?: InvalidateOptions,
-  // ): Promise<void> {}
+  invalidateQueries<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(
+    filters?: TypedInvalidateQueryFilters<TKey, TExact, TQuery>,
+    options?: InvalidateOptions,
+  ): Promise<void> {
+    return this.queryClient.invalidateQueries(typedQueryFilterToRegular(filters), options);
+  }
 
-  // refetchQueries<TPageData = unknown>(
-  //   filters?: RefetchQueryFilters<TPageData>,
-  //   options?: RefetchOptions,
-  // ): Promise<void> {}
+  refetchQueries<
+    TKey extends AnyFilterKey,
+    TExact extends boolean = false,
+    TQuery extends NestedKeysToQuery<TKey, TExact> = NestedKeysToQuery<TKey, TExact>,
+  >(
+    filters?: TypedRefetchQueryFilters<TKey, TExact, TQuery>,
+    options?: RefetchOptions,
+  ): Promise<void> {
+    return this.queryClient.refetchQueries(typedQueryFilterToRegular(filters), options);
+  }
 
-  // fetchQuery<
-  //   TQueryFnData = unknown,
-  //   TError = unknown,
-  //   TData = TQueryFnData,
-  //   TQueryKey extends QueryKey = QueryKey,
-  // >(options: FetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>): Promise<TData> {}
+  // TODO: Add ability to pass TError
+  fetchQuery<TKey extends AnyKeyObj<KeyType.Static | KeyType.Dynamic>>(
+    options: WithRequired<TypedFetchQueryOptions<TKey>, 'queryKey'>,
+  ): Promise<GetKeyMeta<TKey>['TData']> {
+    return this.queryClient.fetchQuery({
+      ...options,
+      queryKey: typedQueryKeyToRegular(options.queryKey),
+    });
+  }
 
-  // prefetchQuery<
-  //   TQueryFnData = unknown,
-  //   TError = unknown,
-  //   TData = TQueryFnData,
-  //   TQueryKey extends QueryKey = QueryKey,
-  // >(options: FetchQueryOptions<TQueryFnData, TError, TData, TQueryKey>): Promise<void> {}
+  // TODO: Add ability to pass TError
+  prefetchQuery<TKey extends AnyKeyObj<KeyType.Static | KeyType.Dynamic>>(
+    options: WithRequired<TypedFetchQueryOptions<TKey>, 'queryKey'>,
+  ): Promise<void> {
+    return this.queryClient.prefetchQuery({
+      ...options,
+      queryKey: typedQueryKeyToRegular(options.queryKey),
+    });
+  }
 
-  // fetchInfiniteQuery<
-  //   TQueryFnData = unknown,
-  //   TError = unknown,
-  //   TData = TQueryFnData,
-  //   TQueryKey extends QueryKey = QueryKey,
-  // >(
-  //   options: FetchInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey>,
-  // ): Promise<InfiniteData<TData>> {}
+  fetchInfiniteQuery<TKey extends AnyKeyObj<KeyType.InfiniteStatic | KeyType.InfiniteDynamic>>(
+    options: WithRequired<TypedFetchQueryOptions<TKey>, 'queryKey'>,
+  ): Promise<GetKeyMeta<TKey>['TData']> {
+    return this.queryClient.fetchInfiniteQuery({
+      ...options,
+      queryKey: typedQueryKeyToRegular(options.queryKey),
+    });
+  }
 
-  // prefetchInfiniteQuery<
-  //   TQueryFnData = unknown,
-  //   TError = unknown,
-  //   TData = TQueryFnData,
-  //   TQueryKey extends QueryKey = QueryKey,
-  // >(options: FetchInfiniteQueryOptions<TQueryFnData, TError, TData, TQueryKey>): Promise<void> {}
+  prefetchInfiniteQuery<TKey extends AnyKeyObj<KeyType.InfiniteStatic | KeyType.InfiniteDynamic>>(
+    options: WithRequired<TypedFetchQueryOptions<TKey>, 'queryKey'>,
+  ): Promise<void> {
+    return this.queryClient.prefetchInfiniteQuery({
+      ...options,
+      queryKey: typedQueryKeyToRegular(options.queryKey),
+    });
+  }
 
   resumePausedMutations(): Promise<unknown> {
     return this.queryClient.resumePausedMutations();
@@ -157,16 +301,21 @@ export class TypedQueryClient {
     this.queryClient.setDefaultOptions(options);
   }
 
-  // setQueryDefaults(
-  //   queryKey: QueryKey,
-  //   options: QueryObserverOptions<unknown, any, any, any>,
-  // ): void {
-  //   this.queryClient.setQueryDefaults(queryKey, options);
-  // }
+  setQueryDefaults<TKey extends AnyKeyObj>(
+    queryKey: TKey,
+    options: TypedQueryObserverOptions<TKey>,
+  ): void {
+    this.queryClient.setQueryDefaults(typedQueryKeyToRegular(queryKey), {
+      ...(options as QueryObserverOptions),
+      queryKey: typedQueryKeyToRegular(options.queryKey),
+    });
+  }
 
-  // getQueryDefaults(queryKey?: QueryKey): QueryObserverOptions<any, any, any, any, any> | undefined {
-  //   return this.queryClient.getQueryDefaults(queryKey);
-  // }
+  getQueryDefaults<TKey extends AnyKeyObj>(
+    queryKey?: TKey,
+  ): TypedQueryObserverOptions<TKey> | undefined {
+    return this.queryClient.getQueryDefaults(typedQueryKeyToRegular(queryKey));
+  }
 
   // TODO: We should add custom support for mutationDefaults
   // See https://tanstack.com/query/v4/docs/react/guides/mutations#persist-mutations
@@ -183,6 +332,7 @@ export class TypedQueryClient {
     return this.queryClient.getMutationDefaults(mutationKey);
   }
 
+  // TODO: WIP
   defaultQueryOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey extends QueryKey>(
     options?:
       | QueryObserverOptions<TQueryFnData, TError, TData, TQueryData, TQueryKey>
@@ -198,4 +348,35 @@ export class TypedQueryClient {
   clear(): void {
     this.queryClient.clear();
   }
+}
+
+if (import.meta.vitest) {
+  const { describe, test, assertType } = await import('vitest');
+  const { matchQueryByKey } = await import('./matchQueryByKey');
+  const { createQueryKeys } = await import('./createQueryKeys');
+
+  const tQueryClient = new TypedQueryClient(new QueryClient());
+
+  const testKeys = createQueryKeys('test', (key) => ({
+    all: key<number>(),
+    allList: key.infinite<number>(),
+    detail: key.dynamic<string, [userId: string]>(),
+    list: key<boolean>()({
+      search: key.dynamic<string, { lol: string }>(),
+    }),
+    byId: key.dynamic<boolean, [id: string]>()({
+      likes: key<number>(),
+    }),
+  }));
+
+  const a = tQueryClient.getQueryData({
+    queryKey: testKeys._def,
+    // predicate: (query) => {
+    //   query.queryKey;
+    //   // TODO: Bullshit but works
+    //   return matchQueryByKey(query, ['test', 'byId', ['asd' as string]] as const) && query;
+    // },
+  });
+
+  tQueryClient.queryClient;
 }
